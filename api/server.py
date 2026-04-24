@@ -57,11 +57,14 @@ async def reset(config: ResetConfig = None):
 async def step(actions: ActionsPayload):
     event_logger.clear_turn_events()
 
-    # Aggregate actions if raw per-agent actions provided
+    # Enforce action limits & tracking
     raw_actions = actions.actions_dict
+    raw_actions = env.enforce_and_track_actions(raw_actions)
+
+    # Aggregate actions
     final_action = aggregate_actions(raw_actions)
 
-    obs, rewards, done, info = env.step(final_action)
+    obs, rewards, done, info = env.step(final_action, raw_agent_actions=raw_actions)
     metrics = tracker.compute_episode_metrics(env)
     events = event_logger.get_turn_events()
 

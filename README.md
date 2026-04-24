@@ -100,6 +100,20 @@ Score = (0.30 * GDP + 0.30 * Survival + 0.20 * Stability + 0.10 * Equality + 0.1
 | **Oversight** | auditor_catch, auditor_inference | Detection rewards |
 | **Penalty** | coalition_betrayal, fiscal_deficit, societal_collapse | Punishments |
 
+## Advanced Simulation Mechanics
+
+To enforce realistic governance constraints and prevent deterministic exploitation, the following mechanics are integrated into the core engine:
+
+- **Policy Costs**: Direct resource deductions for actions (e.g., lockdown costs -0.02, budget allocations scale linearly).
+- **Negotiation Dependencies**: Structurally punishes action variance > 1.5 (-2.0 points) and rewards consensus < 0.5 (+1.5 points).
+- **Joint Action Synergies**: Specific policy combinations (e.g., Health lockdown + Finance stimulus) produce synergistic outcomes or disastrous crashes if mismatched.
+- **Early Inaction Multipliers**: Delays in critical early-crisis turns compound difficulty exponentially.
+- **Action Limits**: Anti-cheat constraints enforce cooldowns and limit consecutive emergency actions (e.g., max 5 emergency lockdowns).
+- **Temporal Decision Memory**: `past_actions` are tracked across turns, enabling agents to learn patterns within episodes.
+- **Outcome Noise**: Gaussian noise injected into all deterministic scenario equations to prevent min-max exploitation.
+- **Resource Depletion**: Explicit tracking of budget allocations to enforce fiscal deficits.
+- **PPO Long-Horizon Configuration**: Configured with explicitly defined `gamma=0.95` for delayed reward reasoning.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
