@@ -79,6 +79,18 @@ def update(state: dict, actions: dict) -> dict:
     # --- Case growth ---
     lockdown_effect = lockdown_level * public_compliance * 0.2
     new_cases = cases * R0 * (1 - lockdown_effect)
+
+    # EARLY INACTION MULTIPLIER (Point 4A)
+    # If lockdown is not deployed early, case growth compounds exponentially.
+    if state.get('turn', 0) <= 5 and lockdown_level == 0.0:
+        sd_updates['no_action_turns'] = sd.get('no_action_turns', 0) + 1
+        
+    no_action_turns = sd.get('no_action_turns', 0)
+    if no_action_turns > 0:
+        # Compounding: 5% more cases per turn of early inaction
+        inaction_multiplier = 1.0 + (no_action_turns * 0.05)
+        new_cases *= inaction_multiplier
+
     sd_updates['cases'] = new_cases
 
     # --- Deaths ---

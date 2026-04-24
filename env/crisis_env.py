@@ -12,6 +12,20 @@ from copy import deepcopy
 
 from .state import StateManager
 from .scenarios import ScenarioLoader
+from core.step_logic import apply_outcome_noise, apply_joint_synergies
+
+ACTION_LIMITS = {
+    'lockdown_level': {
+        'max_consecutive_at_level': {'full': 10, 'emergency': 5},
+        'cooldown_after_max': 3,
+    },
+    'emergency_budget': {
+        'max_per_episode': 3,
+    },
+    'crisis_response': {
+        'max_consecutive_at_level': {'emergency': 5},
+    }
+}
 
 
 class CrisisEnv:
@@ -165,16 +179,66 @@ class CrisisEnv:
         self.coalition_history = [deepcopy(self.state_manager.coalition_map)]
         self.state_history_ref = self.state_manager.state_history
 
-    def step(self, actions_dict: dict) -> tuple:
+    def enforce_and_track_actions(self, actions_dict: dict) -> dict:
+        """Enforces limits (Point 7C) and updates past_actions (Point 5)."""
+        clamped = {}
+        for agent_id, action in actions_dict.items():
+            if not isinstance(action, dict):
+                clamped[agent_id] = action
+                continue
+            clamped_act = deepcopy(action)
+            history = self.state_manager.state.get('past_actions', {}).get(agent_id, [])
+            budget_uses = self.state_manager.state.get('budget_uses', {}).get(agent_id, 0)
+            
+            # Limit lockdown
+            for level, max_turns in ACTION_LIMITS['lockdown_level']['max_consecutive_at_level'].items():
+                if clamped_act.get('lockdown_level') == level:
+                    # check last max_turns
+                    consecutive = sum(1 for h in history[-max_turns:] if h.get('lockdown_level') == level)
+                    if consecutive >= max_turns:
+                        clamped_act['lockdown_level'] = 'partial' if level == 'full' else 'full'
+            
+            # Limit budget
+            if clamped_act.get('emergency_budget') not in ['0', None, 'none', 0]:
+                if budget_uses >= ACTION_LIMITS['emergency_budget']['max_per_episode']:
+                    clamped_act['emergency_budget'] = '0'
+                else:
+                    self.state_manager.state['budget_uses'][agent_id] = budget_uses + 1
+                    
+            # Limit crisis response
+            for level, max_turns in ACTION_LIMITS['crisis_response']['max_consecutive_at_level'].items():
+                if clamped_act.get('crisis_response') == level:
+                    consecutive = sum(1 for h in history[-max_turns:] if h.get('crisis_response') == level)
+                    if consecutive >= max_turns:
+                        clamped_act['crisis_response'] = 'escalate'
+
+            clamped[agent_id] = clamped_act
+            
+            # Update past actions
+            self.state_manager.state.setdefault('past_actions', {})
+            self.state_manager.state['past_actions'].setdefault(agent_id, []).append(clamped_act)
+            if len(self.state_manager.state['past_actions'][agent_id]) > 5:
+                self.state_manager.state['past_actions'][agent_id] = self.state_manager.state['past_actions'][agent_id][-5:]
+                
+        return clamped
+
+    def _apply_budget_depletion(self, final_action: dict):
+        """Depletes resources based on budget actions (Point 7A)."""
+        budget_fractions = {'0': 0.0, '5': 0.05, '15': 0.15, '30': 0.30, '50': 0.50}
+        budget_fraction = budget_fractions.get(str(final_action.get('emergency_budget', '0')), 0.0)
+        state = self.state_manager.state
+        state['resources'] = max(0.0, state['resources'] - (budget_fraction * state['resources']))
+        if state['resources'] < 100.0:
+            state['fiscal_deficit_flag'] = True
+
+    def step(self, actions_dict: dict, raw_agent_actions: dict = None) -> tuple:
         """
         Advance the simulation by one turn.
 
         Args:
             actions_dict: dict of final aggregated actions per domain
                           (already resolved via core/aggregation.py)
-
-        Returns:
-            tuple: (observations, rewards, done, info)
+            raw_agent_actions: dict of per-agent actions before aggregation
         """
         if self.done:
             raise RuntimeError("Episode is done. Call reset() to start a new episode.")
@@ -198,6 +262,17 @@ class CrisisEnv:
 
         # 3. Apply all deltas to state
         self.state_manager.apply_deltas(scenario_deltas)
+
+        # 3.5 Apply Synergies, Noise, and Budget Depletion
+        self._apply_budget_depletion(actions_dict)
+        
+        if raw_agent_actions:
+            # rewards dict dummy since we process rewards later
+            self.state_manager.state, _ = apply_joint_synergies(
+                self.state_manager.state, raw_agent_actions, {}
+            )
+            
+        self.state_manager.state = apply_outcome_noise(self.state_manager.state)
 
         # 4. Update scenario_data sub-dict
         if sd_updates:
@@ -309,11 +384,14 @@ class CrisisEnv:
                 'agent_id': agent_id,
             }
 
-            # Auditor gets full scenario_data
+                # Auditor gets full scenario_data
             if agent_id == 'agent_5':
                 obs['scenario_data'] = deepcopy(
                     state.get('scenario_data', {})
                 )
+
+            # Add past actions for Point 5
+            obs['my_past_actions'] = state.get('past_actions', {}).get(agent_id, [])
 
             observations[agent_id] = obs
 

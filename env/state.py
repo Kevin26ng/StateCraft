@@ -64,6 +64,8 @@ class StateManager:
             'turn': 0,
             'difficulty_tier': 1,
             'scenario_data': {},
+            'past_actions': {f'agent_{i}': [] for i in range(self.num_agents)},
+            'budget_uses': {f'agent_{i}': 0 for i in range(self.num_agents)},
         }
 
         if scenario_state:

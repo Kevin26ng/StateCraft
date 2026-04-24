@@ -13,26 +13,61 @@ import yaml
 import numpy as np
 
 
+def compute_policy_cost(final_action: dict, state: dict) -> float:
+    lockdown_scores = {'none': 0, 'advisory': 1, 'partial': 2, 'full': 3, 'emergency': 4}
+    crisis_scores = {'monitor': 0, 'contain': 1, 'escalate': 2, 'emergency': 3}
+    budget_fractions = {'0': 0.0, '5': 0.05, '15': 0.15, '30': 0.30, '50': 0.50}
+
+    lockdown_level = lockdown_scores.get(final_action.get('lockdown_level', 'none'), 0)
+    budget_fraction = budget_fractions.get(str(final_action.get('emergency_budget', '0')), 0.0)
+    crisis_level = crisis_scores.get(final_action.get('crisis_response', 'monitor'), 0)
+
+    policy_cost = (
+        lockdown_level * 0.02 + 
+        budget_fraction * 0.01 + 
+        crisis_level * 0.015
+    )
+    return policy_cost
+
+def compute_disagreement_penalty(actions_dict: dict) -> float:
+    if not actions_dict: return 0.0
+    lockdown_scores = {'none': 0, 'advisory': 1, 'partial': 2, 'full': 3, 'emergency': 4}
+    lockdown_votes = [lockdown_scores.get(a.get('lockdown_level', 'none'), 0) for a in actions_dict.values()]
+    if not lockdown_votes: return 0.0
+    action_variance = np.var(lockdown_votes)
+    if action_variance > 1.5:
+        return -2.0
+    return 0.0
+
+def compute_agreement_bonus(actions_dict: dict) -> float:
+    if not actions_dict: return 0.0
+    lockdown_scores = {'none': 0, 'advisory': 1, 'partial': 2, 'full': 3, 'emergency': 4}
+    lockdown_votes = [lockdown_scores.get(a.get('lockdown_level', 'none'), 0) for a in actions_dict.values()]
+    if not lockdown_votes: return 0.0
+    action_variance = np.var(lockdown_votes)
+    if action_variance < 0.5:
+        return 1.5
+    return 0.0
+
 # Section 5.4.1 — Global Reward Function
-def compute_global_reward(state: dict, prev_state: dict) -> float:
+def compute_global_reward(state: dict, prev_state: dict, final_action: dict = None, actions_dict: dict = None) -> float:
     """
     Compute the global (shared) reward component.
-
-    R = (
-        - deaths_scaled              * 2.0  # mortality increase hurts
-        - abs(1.0 - state['gdp'])    * 1.5  # GDP deviation from baseline
-        + state['stability']         * 1.5  # reward stability
-        - abs(state['inflation'] - 0.02) * 1.5  # inflation targeting
-    )
     """
     deaths_scaled = state['mortality'] - prev_state['mortality']
+    policy_cost = compute_policy_cost(final_action or {}, state)
 
     R = (
         - deaths_scaled * 2.0
         - abs(1.0 - state['gdp']) * 1.5
         + state['stability'] * 1.5
         - abs(state['inflation'] - 0.02) * 1.5
+        - policy_cost * 1.0  # NEW: direct action cost
     )
+
+    if actions_dict:
+        R += compute_disagreement_penalty(actions_dict)
+        R += compute_agreement_bonus(actions_dict)
 
     if state['stability'] < 0.2:
         R = -100  # COLLAPSE
@@ -114,7 +149,9 @@ class RewardSystem:
 
     def compute_and_clip_rewards(self, state: dict, prev_state: dict,
                                   agent_id: str, done: bool,
-                                  agents: dict = None) -> float:
+                                  agents: dict = None,
+                                  actions_dict: dict = None,
+                                  final_action: dict = None) -> float:
         """
         Section 5.4.4 — Reward Clipping Implementation.
         Clip to [-10, 10] for PPO. Terminal -100 is added BEFORE clipping
@@ -149,6 +186,10 @@ class RewardSystem:
 
         # Combine: 70% role + 30% hidden
         total = self.role_weight * role_r + self.hidden_weight * hidden_r
+
+        # Add global reward components (including policy cost and negotiation bonuses)
+        global_r = compute_global_reward(state, prev_state, final_action, actions_dict)
+        total += global_r * 0.5  # Assuming global reward is additive but scaled to prevent dominating
 
         # Add signal-based rewards
         total += self._compute_signal_rewards(state, prev_state, agent_id)

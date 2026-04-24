@@ -37,6 +37,39 @@ EPISODE_MODE = {'TRAINING', 'DEMO', 'STRESS_TEST'}
 MAX_STEPS = {'TRAINING': 30, 'DEMO': 200, 'STRESS_TEST': 500}
 NUM_EPISODES = 500
 
+METRIC_CONSTRAINTS = {
+    'society_score':       (100, 15.0),  # must be >15pts above random by ep100
+    'negotiation_success': (100, 0.15),  # must improve by 15% vs baseline by ep100
+    'alliance_stability':  (150, 2.0),   # must be >2 turns above random by ep150
+    'betrayal_rate':       (150, -0.5),  # must FALL by 0.5 vs baseline by ep150
+    'auditor_accuracy':    (200, 0.20),  # must exceed 20% (vs 17% random) by ep200
+}
+
+def check_metric_constraints(episode, metrics_history, baseline_metrics) -> list:
+    warnings = []
+    if not metrics_history or not baseline_metrics:
+        return warnings
+    for metric, (check_at, min_delta) in METRIC_CONSTRAINTS.items():
+        if episode < check_at:
+            continue
+        recent_val = np.mean([m.get(metric, 0) for m in metrics_history[-10:]])
+        baseline = baseline_metrics.get(metric, 0)
+        actual_delta = recent_val - baseline
+        if metric == 'betrayal_rate':
+            if actual_delta > min_delta: # Negative delta required
+                warnings.append(
+                    f"WARNING: {metric} improvement ({actual_delta:.2f}) < required ({min_delta:.2f}). "
+                    f"Environment may be misconfigured."
+                )
+        else:
+            if actual_delta < min_delta:
+                warnings.append(
+                    f"WARNING: {metric} improvement ({actual_delta:.2f}) < required ({min_delta:.2f}). "
+                    f"Environment may be misconfigured."
+                )
+    return warnings
+
+
 
 def create_agents(memory_store=None) -> dict:
     """Create the 6 canonical agents."""
@@ -112,6 +145,7 @@ def run_training_loop(config: dict = None):
     print("=" * 70)
 
     metrics_history = []
+    baseline_metrics = {}
 
     for episode in range(1, num_episodes + 1):
         obs = env.reset()
@@ -153,11 +187,14 @@ def run_training_loop(config: dict = None):
                 agent = AGENTS[agent_id]
                 actions[agent_id] = agent.act(observations.get(agent_id, {}))
 
+            # 3.5 Enforce action limits & tracking
+            actions = env.enforce_and_track_actions(actions)
+
             # 4. Aggregate actions
             final_action = aggregate_actions(actions)
 
             # 5. Step environment
-            obs, rewards_raw, done, info = env.step(final_action)
+            obs, rewards_raw, done, info = env.step(final_action, raw_agent_actions=actions)
 
             # Inject crisis generator events
             crisis_event = crisis_generator.generate_event(
@@ -181,6 +218,8 @@ def run_training_loop(config: dict = None):
                     agent_id=agent_id,
                     done=done,
                     agents=AGENTS,
+                    actions_dict=actions,
+                    final_action=final_action
                 )
             rewards = {
                 a: float(np.clip(rewards[a], -10, 10)) for a in AGENT_IDS
@@ -212,6 +251,12 @@ def run_training_loop(config: dict = None):
             if config.get('demo_mode', False):
                 time.sleep(0.5)
                 print(f"  Turn {step_num+1}: {narrative_headline}")
+                
+                political_agent = AGENTS.get('agent_1')
+                if political_agent and getattr(political_agent, '_coalition_collapse_triggered', False):
+                    if not getattr(political_agent, '_logged_betrayal', False):
+                        print(f"  *** [EVENT] THE SLOW BETRAYAL: Political Pressure Agent engineered coalition collapse! ***")
+                        political_agent._logged_betrayal = True
 
             event_logger.clear_turn_events()
 
@@ -252,6 +297,17 @@ def run_training_loop(config: dict = None):
                 f"Turns: {metrics['turns_survived']:>3d} | "
                 f"Tier: {crisis_generator.current_tier}"
             )
+
+        if episode == 10:
+            # Snapshot baseline at ep 10
+            for k in metrics.keys():
+                if isinstance(metrics[k], (int, float)):
+                    baseline_metrics[k] = np.mean([m.get(k, 0) for m in metrics_history])
+
+        if episode % 25 == 0:
+            warnings = check_metric_constraints(episode, metrics_history, baseline_metrics)
+            for w in warnings:
+                print(w)
 
     print("\n" + "=" * 70)
     print("Training complete.")
