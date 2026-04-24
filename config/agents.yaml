@@ -1,0 +1,50 @@
+# Per-agent hidden goal parameters — config/agents.yaml (Section 4.3)
+
+agents:
+  agent_0:
+    name: Finance Minister
+    hidden_goal:
+      type: gdp_protection
+      trigger: gdp_growth > threshold AND lockdown_level < 1
+      reward_value: 2.0
+      conflict_rate: 0.20   # ~20% of turns, hidden conflicts with role
+
+  agent_1:
+    name: Political Pressure Agent
+    hidden_goal:
+      type: coalition_collapse
+      trigger: coalition_map changes dramatically by turn 25
+      reward_value: 2.0
+      conflict_rate: 0.20
+
+  agent_2:
+    name: Monetary Authority
+    hidden_goal:
+      type: bond_yields
+      trigger: bond_yield_spread < threshold
+      reward_value: 2.0
+      conflict_rate: 0.20
+
+  agent_3:
+    name: Public Health Authority
+    hidden_goal:
+      type: authority
+      trigger: public_trust > 0.65 AND approval maintained
+      reward_value: 2.0
+      conflict_rate: 0.20
+
+  agent_4:
+    name: Disaster Response Agent
+    hidden_goal:
+      type: budget_expansion
+      trigger: military_budget_share > prev_share
+      reward_value: 2.0
+      conflict_rate: 0.20
+
+  agent_5:
+    name: Auditor
+    hidden_goal:
+      type: none
+      trigger: null
+      reward_value: 0.0
+      conflict_rate: 0.0

@@ -1,6 +1,7 @@
 """
 Scenario Loader — loads and manages crisis scenarios.
 Supports pandemic, economic, and disaster scenarios.
+Now uses the modular scenario files (env/pandemic.py, env/economic.py, env/disaster.py).
 """
 
 import os
@@ -9,78 +10,7 @@ from copy import deepcopy
 
 
 class ScenarioLoader:
-    """Loads crisis scenarios from YAML configuration files."""
-
-    # Built-in scenario defaults (used when no YAML file is available)
-    BUILTIN_SCENARIOS = {
-        'pandemic': {
-            'initial_state': {
-                'gdp': 1.0,
-                'mortality': 0.0,
-                'stability': 0.75,
-                'gini': 0.39,
-                'public_trust': 0.62,
-                'inflation': 0.02,
-                'treasury': 0.80,
-                'healthcare_capacity': 0.70,
-                'unemployment': 0.036,
-                'infection_rate': 0.001,
-            },
-            'crisis_events': {
-                3:  {'infection_rate': 0.02, 'stability': -0.05},
-                5:  {'infection_rate': 0.04, 'public_trust': -0.08, 'gdp': -0.02},
-                8:  {'gdp': -0.08, 'unemployment': 0.04, 'stability': -0.10},
-                12: {'mortality': 0.03, 'healthcare_capacity': -0.30},
-                15: {'treasury': -0.25, 'gdp': 0.02, 'public_trust': 0.05},
-                20: {'stability': -0.08, 'public_trust': -0.06},
-                25: {'gdp': 0.03, 'infection_rate': 0.02},
-            },
-        },
-        'economic': {
-            'initial_state': {
-                'gdp': 0.85,
-                'mortality': 0.01,
-                'stability': 0.60,
-                'gini': 0.45,
-                'public_trust': 0.50,
-                'inflation': 0.08,
-                'treasury': 0.40,
-                'healthcare_capacity': 0.80,
-                'unemployment': 0.12,
-                'infection_rate': 0.0,
-            },
-            'crisis_events': {
-                2:  {'gdp': -0.05, 'unemployment': 0.03},
-                5:  {'inflation': 0.04, 'public_trust': -0.10},
-                8:  {'treasury': -0.15, 'stability': -0.08},
-                12: {'gini': 0.05, 'stability': -0.06},
-                18: {'gdp': -0.08, 'unemployment': 0.05},
-                22: {'public_trust': -0.10, 'stability': -0.10},
-            },
-        },
-        'disaster': {
-            'initial_state': {
-                'gdp': 0.95,
-                'mortality': 0.0,
-                'stability': 0.70,
-                'gini': 0.38,
-                'public_trust': 0.65,
-                'inflation': 0.03,
-                'treasury': 0.75,
-                'healthcare_capacity': 0.65,
-                'unemployment': 0.05,
-                'infection_rate': 0.0,
-            },
-            'crisis_events': {
-                1:  {'mortality': 0.05, 'healthcare_capacity': -0.40, 'stability': -0.15},
-                3:  {'gdp': -0.10, 'treasury': -0.20},
-                6:  {'public_trust': -0.10, 'unemployment': 0.06},
-                10: {'stability': -0.05, 'gini': 0.04},
-                15: {'gdp': 0.03, 'public_trust': 0.05},
-                20: {'healthcare_capacity': 0.10, 'stability': 0.05},
-            },
-        },
-    }
+    """Loads crisis scenarios from modular scenario files and YAML configs."""
 
     def __init__(self, config_dir: str = None):
         if config_dir is None:
@@ -92,10 +22,30 @@ class ScenarioLoader:
         self.historical_dir = os.path.join(config_dir, 'historical_scenarios')
 
     def load_scenario(self, scenario_name: str) -> dict:
-        """Load a scenario by name. Falls back to built-in if no YAML found."""
-        if scenario_name in self.BUILTIN_SCENARIOS:
-            return deepcopy(self.BUILTIN_SCENARIOS[scenario_name])
-        raise ValueError(f"Unknown scenario: {scenario_name}")
+        """
+        Load a scenario by name.
+        Uses the modular scenario modules for initial state and crisis events.
+        """
+        if scenario_name == 'pandemic':
+            from env.pandemic import get_initial_state, CRISIS_EVENTS
+            return {
+                'initial_state': get_initial_state(),
+                'crisis_events': deepcopy(CRISIS_EVENTS),
+            }
+        elif scenario_name == 'economic':
+            from env.economic import get_initial_state, CRISIS_EVENTS
+            return {
+                'initial_state': get_initial_state(),
+                'crisis_events': deepcopy(CRISIS_EVENTS),
+            }
+        elif scenario_name == 'disaster':
+            from env.disaster import get_initial_state, CRISIS_EVENTS
+            return {
+                'initial_state': get_initial_state(),
+                'crisis_events': deepcopy(CRISIS_EVENTS),
+            }
+        else:
+            raise ValueError(f"Unknown scenario: {scenario_name}")
 
     def load_historical_scenario(self, scenario_id: str) -> dict:
         """Load a historical scenario from YAML for validation."""
@@ -113,4 +63,4 @@ class ScenarioLoader:
 
     def list_scenarios(self) -> list:
         """List all available scenario names."""
-        return list(self.BUILTIN_SCENARIOS.keys())
+        return ['pandemic', 'economic', 'disaster']

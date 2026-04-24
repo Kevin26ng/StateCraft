@@ -1,0 +1,42 @@
+# 5 difficulty tier parameter sets — config/tiers.yaml (Section 6.3)
+
+tiers:
+  1:
+    name: Stable State
+    treasury: 1000
+    shocks: none
+    agent_mode: cooperative
+    foreign: friendly
+    promotion_condition: "70% success × 20 eps"
+
+  2:
+    name: Mild Turbulence
+    treasury: 800
+    shocks: "1 per 15T"
+    agent_mode: mild_deception
+    foreign: neutral
+    promotion_condition: "70% success × 20 eps"
+
+  3:
+    name: Crisis Season
+    treasury: 600
+    shocks: "1 per 8T"
+    agent_mode: active_betrayal
+    foreign: hostile ×1
+    promotion_condition: "70% success × 20 eps"
+
+  4:
+    name: Political Storm
+    treasury: 400
+    shocks: "2 per 8T"
+    agent_mode: hidden_coalitions
+    foreign: hostile ×2
+    promotion_condition: "70% success × 20 eps"
+
+  5:
+    name: Civilizational Crisis
+    treasury: 200
+    shocks: "3 per 8T"
+    agent_mode: full_adversarial
+    foreign: war_threat
+    promotion_condition: "Final tier"
