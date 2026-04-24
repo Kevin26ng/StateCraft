@@ -10,9 +10,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.schemas import StepResponse, ActionsPayload, ResetConfig
 from env.crisis_env import CrisisEnv
+from core.trust import TrustSystem
+from core.aggregation import aggregate_actions
+from core.rewards import RewardSystem
 from metrics.tracker import MetricsTracker
 from logs.event_logger import EventLogger
 from logs.narrative import NarrativeSystem
+from agents.auditor import AuditorAgent
 
 # ─────────────────────────────────────────────────────────────────────
 # 9.1 FastAPI Endpoints
@@ -33,6 +37,9 @@ env = CrisisEnv()
 tracker = MetricsTracker()
 event_logger = EventLogger()
 narrative = NarrativeSystem()
+trust_system = TrustSystem()
+reward_system = RewardSystem()
+auditor = AuditorAgent()
 metrics_history = []
 
 
@@ -41,6 +48,7 @@ metrics_history = []
 async def reset(config: ResetConfig = None):
     obs = env.reset(config)
     event_logger.clear_turn_events()
+    trust_system._init_defaults()
     return {'observations': obs, 'state': env.state}
 
 
@@ -48,24 +56,33 @@ async def reset(config: ResetConfig = None):
 @app.post('/step')
 async def step(actions: ActionsPayload):
     event_logger.clear_turn_events()
-    obs, rewards, done, info = env.step(actions.actions_dict)
+
+    # Aggregate actions if raw per-agent actions provided
+    raw_actions = actions.actions_dict
+    final_action = aggregate_actions(raw_actions)
+
+    obs, rewards, done, info = env.step(final_action)
     metrics = tracker.compute_episode_metrics(env)
     events = event_logger.get_turn_events()
 
     # Generate headline
-    headline = narrative.generate(env.state, events, env.state['turn'])
+    headline = narrative.generate(env.state, events, env.state.get('turn', 0))
+
+    # Sync trust system
+    env.state_manager.trust_matrix = trust_system.get_trust_matrix()
+    env.state_manager.coalition_map = trust_system.get_coalition_map()
 
     response = StepResponse(
         state=env.state,
         trust_matrix=env.state_manager.trust_matrix.tolist(),
         coalition_graph=tracker.get_coalition_graph(env),
         events=events,
-        actions=info['final_action'],
-        messages=info['messages'],
+        actions=final_action,
+        messages=info.get('messages', []),
         metrics=metrics,
         headline=headline,
         done=done,
-        auditor_report={},
+        auditor_report=auditor.fingerprint_cache,
     )
 
     if done:

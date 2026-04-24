@@ -3,7 +3,6 @@ __pycache__/
 *$py.class
 venv/
 .venv/
-# Note: NOT ignoring 'env/' here because it is your core simulation engine package!
 
 data/memory.json
 *.log
@@ -13,3 +12,4 @@ data/memory.json
 *.swo
 .DS_Store
 Thumbs.db
+.env

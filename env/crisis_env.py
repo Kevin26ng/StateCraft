@@ -1,6 +1,8 @@
 """
-CrisisEnv — Main simulation environment.
+CrisisEnv — Main simulation environment (Section 3.1).
+
 Orchestrates agents, state, dynamics, and scenarios per episode.
+Uses the new core/ systems (trust, negotiation, aggregation, rewards).
 """
 
 import os
@@ -10,20 +12,25 @@ from copy import deepcopy
 
 from .state import StateManager
 from .scenarios import ScenarioLoader
-from .dynamics import WorldDynamics
 
 
 class CrisisEnv:
     """
     Crisis Governance Simulator Environment.
 
+    Section 3.1.1 — Class Interface:
+      - reset(config) -> observations_dict
+      - step(actions_dict) -> (obs, rewards, done, info)
+      - get_observation(agent_id) -> partial observation dict
+
     Manages 6 agents governing through a multi-domain crisis.
     Each step:
       1. Agents submit actions per domain
-      2. Negotiation resolves conflicts
-      3. World dynamics compute state transitions
-      4. Rewards are calculated
-      5. Events are logged
+      2. World dynamics compute state transitions
+      3. Scenario-specific update equations run
+      4. Crisis events are injected
+      5. State is updated
+      6. Turn advances
     """
 
     def __init__(self, config: dict = None):
@@ -39,10 +46,10 @@ class CrisisEnv:
 
         self.state_manager = StateManager(num_agents=self.num_agents)
         self.scenario_loader = ScenarioLoader()
-        self.dynamics = WorldDynamics()
 
         self.state = {}
         self.scenario = None
+        self.scenario_module = None
         self.episode = 0
         self.done = False
 
@@ -75,6 +82,18 @@ class CrisisEnv:
             'initial_tier': 1,
         }
 
+    def _load_scenario_module(self, scenario_name: str):
+        """Dynamically load the scenario-specific module."""
+        if scenario_name == 'pandemic':
+            from env import pandemic as mod
+        elif scenario_name == 'economic':
+            from env import economic as mod
+        elif scenario_name == 'disaster':
+            from env import disaster as mod
+        else:
+            mod = None
+        self.scenario_module = mod
+
     def reset(self, config=None) -> dict:
         """
         Initialize or reset the environment for a new episode.
@@ -97,13 +116,20 @@ class CrisisEnv:
         self.episode += 1
         self.done = False
 
-        # Load scenario
+        # Load scenario module
+        self._load_scenario_module(self.scenario_name)
+
+        # Load scenario data
         self.scenario = self.scenario_loader.load_scenario(self.scenario_name)
 
+        # Get scenario-specific initial state
+        if self.scenario_module and hasattr(self.scenario_module, 'get_initial_state'):
+            initial = self.scenario_module.get_initial_state()
+        else:
+            initial = self.scenario.get('initial_state', {})
+
         # Initialize state
-        self.state = self.state_manager.initialize(
-            self.scenario.get('initial_state', {})
-        )
+        self.state = self.state_manager.initialize(initial)
 
         # Reset logs
         self.coalition_history = [deepcopy(self.state_manager.coalition_map)]
@@ -144,7 +170,8 @@ class CrisisEnv:
         Advance the simulation by one turn.
 
         Args:
-            actions_dict: dict mapping agent_id -> {domain: action}
+            actions_dict: dict of final aggregated actions per domain
+                          (already resolved via core/aggregation.py)
 
         Returns:
             tuple: (observations, rewards, done, info)
@@ -154,177 +181,140 @@ class CrisisEnv:
 
         turn = self.state_manager.state['turn']
 
-        # 1. Resolve conflicting actions via negotiation/voting
-        final_actions = self.dynamics.resolve_conflicting_actions(actions_dict)
+        # 1. Apply scenario-specific update equations
+        scenario_deltas = {}
+        sd_updates = {}
+        if self.scenario_module and hasattr(self.scenario_module, 'update'):
+            scenario_deltas, sd_updates = self.scenario_module.update(
+                self.state_manager.state, actions_dict
+            )
 
-        # Calculate agreement level for dependency
-        economy_votes = [a.get('economy') for a in actions_dict.values() if isinstance(a, dict)]
-        agreement_level = economy_votes.count(final_actions.get('economy')) / max(1, len(economy_votes))
-
-        # 2. Compute action effects
-        action_deltas = self.dynamics.compute_action_effects(final_actions, self.state_manager.state)
-
-        # Negotiation: Dependency (stimulus effectiveness *= agreement_level)
-        if final_actions.get('economy') == 'stimulus' and 'gdp' in action_deltas:
-            # Assume positive GDP impact from stimulus is scaled by agreement
-            if action_deltas['gdp'] > 0:
-                action_deltas['gdp'] *= agreement_level
-
-        # Update decision memory (past_actions) and lockdown_duration
-        past = self.state_manager.state.get('past_actions', [])
-        past.append(deepcopy(final_actions))
-        if len(past) > 5:
-            past.pop(0)
-        self.state_manager.state['past_actions'] = past
-
-        if final_actions.get('social') == 'lockdown':
-            self.state_manager.state['lockdown_duration'] = self.state_manager.state.get('lockdown_duration', 0) + 1
-        else:
-            self.state_manager.state['lockdown_duration'] = 0
-
-        # 3. Apply crisis events for this turn
-        crisis_deltas = self.scenario_loader.get_crisis_events(self.scenario, turn + 1)
+        # 2. Apply crisis events for this turn
+        crisis_deltas = self.scenario_loader.get_crisis_events(
+            self.scenario, turn + 1
+        )
         for field, delta in crisis_deltas.items():
-            action_deltas[field] = action_deltas.get(field, 0) + delta
+            scenario_deltas[field] = scenario_deltas.get(field, 0) + delta
 
-        # 4. Apply natural dynamics
-        natural_deltas = self.dynamics.apply_natural_dynamics(self.state_manager.state)
-        for field, delta in natural_deltas.items():
-            action_deltas[field] = action_deltas.get(field, 0) + delta
+        # 3. Apply all deltas to state
+        self.state_manager.apply_deltas(scenario_deltas)
 
-        # 5. Apply all deltas to state
-        self.state_manager.apply_deltas(action_deltas)
+        # 4. Update scenario_data sub-dict
+        if sd_updates:
+            current_sd = self.state_manager.state.get('scenario_data', {})
+            current_sd.update(sd_updates)
+            self.state_manager.state['scenario_data'] = current_sd
 
-        # 6. Process negotiation messages and update trust/coalitions
-        messages = self._process_negotiations(actions_dict)
-
-        # 7. Update difficulty tier
+        # 5. Update difficulty tier
         self.state_manager.state['difficulty_tier'] = \
             self.state_manager.compute_difficulty_tier()
 
-        # 8. Advance turn
+        # 6. Advance turn
         self.state_manager.advance_turn()
 
-        # 9. Record coalition snapshot
+        # 7. Record coalition snapshot
         self.coalition_history.append(
             deepcopy(self.state_manager.coalition_map)
         )
 
-        # 10. Check termination
+        # 8. Check termination
         collapsed = self.state_manager.check_collapse()
         max_reached = self.state_manager.state['turn'] >= self.max_steps
         self.done = collapsed or max_reached
 
-        # 11. Get updated state
+        # 9. Get updated state
         self.state = self.state_manager.get_state()
 
-        # 12. Compute rewards
-        from rewards.rewards import RewardCalculator
-        reward_calc = RewardCalculator()
-        rewards = reward_calc.compute_rewards(
-            state=self.state,
-            actions=final_actions,
-            coalition_map=self.state_manager.coalition_map,
-            trust_matrix=self.state_manager.trust_matrix,
-            collapsed=collapsed,
-            agent_actions=actions_dict
-        )
-
-        # 13. Generate headline
-        from logs.narrative import generate_headline
-        headline = generate_headline(self.state, [], self.state_manager.state['turn'])
-
-        # 14. Build observations
+        # 10. Build observations
         observations = self._build_observations()
 
         info = {
-            'final_action': final_actions,
-            'messages': messages,
-            'headline': headline,
+            'final_action': actions_dict,
+            'messages': [],
+            'headline': '',
             'collapsed': collapsed,
         }
+
+        # Return empty rewards — actual reward computation is done by core/rewards.py
+        rewards = {f'agent_{i}': 0.0 for i in range(self.num_agents)}
 
         return observations, rewards, self.done, info
 
     def _build_observations(self) -> dict:
-        """Build per-agent observations (partial observability)."""
+        """
+        Build per-agent observations (partial observability).
+        Section 3.1.4 — Observation Filtering.
+        """
         observations = {}
         state = self.state_manager.state
 
+        # Observation filters per agent role
+        observation_filters = {
+            'agent_0': {  # Finance: gdp, inflation, resources, coalition_map, trust_matrix (own row)
+                'can_see': ['gdp', 'inflation', 'resources', 'stability'],
+                'cannot_see': ['mortality', 'gini', 'public_trust'],
+            },
+            'agent_1': {  # Political: public_trust, coalition_map, stability, approval ratings
+                'can_see': ['public_trust', 'stability', 'gini'],
+                'cannot_see': ['inflation', 'mortality'],
+            },
+            'agent_2': {  # Central Bank: inflation, gdp, resources, interest_rate
+                'can_see': ['inflation', 'gdp', 'resources'],
+                'cannot_see': ['mortality', 'public_trust', 'gini'],
+            },
+            'agent_3': {  # Health: mortality, gini, public_trust, stability, pandemic scenario_data
+                'can_see': ['mortality', 'gini', 'public_trust', 'stability'],
+                'cannot_see': ['gdp', 'inflation'],
+            },
+            'agent_4': {  # Military: stability, resources, disaster scenario_data
+                'can_see': ['stability', 'resources'],
+                'cannot_see': ['inflation', 'gini'],
+            },
+            'agent_5': {  # Auditor: ALL state variables (full observation)
+                'can_see': 'all',
+                'cannot_see': [],
+            },
+        }
+
         for i in range(self.num_agents):
             agent_id = f'agent_{i}'
-            # Each agent sees: public state + own trust row + coalition map
-            obs = {
-                'public_state': {
+            filters = observation_filters.get(agent_id, {'can_see': 'all', 'cannot_see': []})
+
+            # Build public state view
+            if filters['can_see'] == 'all':
+                public_state = {
                     'gdp': state['gdp'],
-                    'mortality': state['mortality'],
+                    'inflation': state['inflation'],
+                    'resources': state['resources'],
                     'stability': state['stability'],
+                    'mortality': state['mortality'],
+                    'gini': state['gini'],
                     'public_trust': state['public_trust'],
                     'turn': state['turn'],
                     'difficulty_tier': state['difficulty_tier'],
-                },
+                }
+            else:
+                public_state = {
+                    'turn': state['turn'],
+                    'difficulty_tier': state['difficulty_tier'],
+                }
+                for field in filters['can_see']:
+                    if field in state:
+                        public_state[field] = state[field]
+
+            obs = {
+                'public_state': public_state,
                 'trust_row': self.state_manager.trust_matrix[i].tolist(),
                 'coalition_map': deepcopy(self.state_manager.coalition_map),
                 'agent_id': agent_id,
             }
+
+            # Auditor gets full scenario_data
+            if agent_id == 'agent_5':
+                obs['scenario_data'] = deepcopy(
+                    state.get('scenario_data', {})
+                )
+
             observations[agent_id] = obs
 
         return observations
-
-    def _process_negotiations(self, actions_dict: dict) -> list:
-        """
-        Process negotiation messages embedded in agent actions.
-        Updates trust matrix and coalition map based on messages.
-
-        Returns:
-            list of message dicts
-        """
-        messages = []
-
-        for agent_id, actions in actions_dict.items():
-            agent_msgs = actions.get('messages', [])
-            for msg in agent_msgs:
-                messages.append({
-                    'from': agent_id,
-                    'to': msg.get('to', 'all'),
-                    'type': msg.get('type', 'neutral'),
-                    'content': msg.get('content', ''),
-                })
-
-                # Update trust based on message type
-                try:
-                    from_idx = int(agent_id.split('_')[1])
-                    to_idx = int(msg.get('to', 'all').split('_')[1]) \
-                        if msg.get('to', 'all') != 'all' else None
-                except (ValueError, IndexError):
-                    continue
-
-                if to_idx is not None:
-                    if msg.get('type') == 'support':
-                        self.state_manager.update_trust(from_idx, to_idx, 0.05)
-                        # Check for coalition formation
-                        self.agreement_log.append({
-                            'turn': self.state_manager.state['turn'],
-                            'from': agent_id,
-                            'to': msg['to'],
-                            'was_agreed': True,
-                        })
-                    elif msg.get('type') == 'reject':
-                        self.state_manager.update_trust(from_idx, to_idx, -0.03)
-                    elif msg.get('type') == 'betray':
-                        self.state_manager.update_trust(from_idx, to_idx, -0.10)
-                        self.defection_log.append({
-                            'turn': self.state_manager.state['turn'],
-                            'agent': agent_id,
-                            'was_agreed': True,
-                        })
-
-        # Record negotiation round
-        if messages:
-            self.negotiation_log.append({
-                'turn': self.state_manager.state['turn'],
-                'final_round_messages': messages,
-                'coalition_map': deepcopy(self.state_manager.coalition_map),
-            })
-
-        return messages

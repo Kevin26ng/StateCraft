@@ -10,19 +10,11 @@ Usage:
 
 import sys
 import os
-import time
 import argparse
 import yaml
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from env.crisis_env import CrisisEnv
-from agents.base_agent import RandomAgent, HeuristicAgent
-from metrics.tracker import MetricsTracker
-from logs.event_logger import EventLogger
-from logs.narrative import NarrativeSystem
-from memory.store import MemoryStore
 
 
 def load_config():
@@ -38,99 +30,9 @@ def load_config():
 
 
 def run_training(config: dict):
-    """Run training episodes."""
-    env = CrisisEnv(config)
-    tracker = MetricsTracker()
-    event_logger = EventLogger()
-    narrative = NarrativeSystem()
-    memory = MemoryStore(
-        backend=config.get('memory_backend', 'json'),
-        path=config.get('memory_path', './data/memory.json'),
-    )
-
-    num_episodes = config.get('num_episodes', 500)
-    num_agents = config.get('num_agents', 6)
-
-    # Create agents
-    agents = {
-        f'agent_{i}': HeuristicAgent(f'agent_{i}', memory_store=memory)
-        for i in range(num_agents)
-    }
-
-    print("=" * 70)
-    print("Cognitive Society: Crisis Governance Simulator")
-    print(f"Mode: {config.get('episode_mode', 'TRAINING')}")
-    print(f"Scenario: {config.get('scenario', 'pandemic')}")
-    print(f"Episodes: {num_episodes}")
-    print("=" * 70)
-
-    for episode in range(1, num_episodes + 1):
-        obs = env.reset()
-        event_logger.clear_turn_events()
-        episode_reward = 0.0
-
-        max_steps = config.get('max_steps', {}).get(
-            config.get('episode_mode', 'TRAINING'), 30
-        )
-
-        for step in range(max_steps):
-            # Collect actions
-            actions_dict = {}
-            for agent_id, agent in agents.items():
-                agent_obs = obs.get(agent_id, {})
-                actions_dict[agent_id] = agent.act(agent_obs)
-
-            # Step environment
-            obs, rewards, done, info = env.step(actions_dict)
-
-            # Accumulate rewards
-            step_reward = sum(rewards.values())
-            episode_reward += step_reward
-
-            # Demo mode: slow rendering
-            if config.get('demo_mode', False):
-                time.sleep(0.5)
-                headline = narrative.generate(
-                    env.state, event_logger.get_turn_events(),
-                    env.state_manager.state['turn']
-                )
-                print(f"  Turn {step+1}: {headline}")
-
-            if done:
-                break
-
-        # Compute episode metrics
-        tracker.accumulate_reward(episode_reward)
-        metrics = tracker.compute_episode_metrics(env)
-        tracker.record_episode(metrics)
-
-        # Store key events in memory
-        for i in range(num_agents):
-            agent_id = f'agent_{i}'
-            memory.append(agent_id, {
-                'episode': episode,
-                'summary': (
-                    f'Score: {metrics["society_score"]:.0f}/100, '
-                    f'GDP: {env.state["gdp"]:.2f}, '
-                    f'Mortality: {env.state["mortality"]:.2%}'
-                ),
-            })
-
-        # Progress output
-        if episode % 50 == 0 or episode <= 3:
-            print(
-                f"Ep {episode:>4d} | "
-                f"Score: {metrics['society_score']:5.1f} | "
-                f"Stability: {metrics['alliance_stability']:5.1f} | "
-                f"Trust: {metrics['trust_network_avg']:.2f} | "
-                f"Turns: {metrics['turns_survived']:>3d} | "
-                f"Tier: {metrics['difficulty_tier']}"
-            )
-
-    print("\n" + "=" * 70)
-    print("Training complete.")
-    print(f"Final society score: {metrics['society_score']:.1f}/100")
-    print("=" * 70)
+    """Run training episodes using the canonical training loop."""
+    from training.loop import run_training_loop
+    run_training_loop(config)
 
 
 def run_demo(config: dict):

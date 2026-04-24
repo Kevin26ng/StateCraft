@@ -1,5 +1,7 @@
 """
-Base Agent — abstract agent interface for the Crisis Governance Simulator.
+Base Agent — agents/base_agent.py (Section 4.1)
+
+Abstract base class for all agents in the Crisis Governance Simulator.
 Agents can be rule-based, RL-trained, or LLM-driven.
 """
 
@@ -9,198 +11,117 @@ from .roles import get_role_config, AGENT_ROLES
 
 
 class BaseAgent(ABC):
-    """Abstract base class for all agents."""
+    """
+    Abstract base class for all agents.
 
-    def __init__(self, agent_id: str, memory_store=None):
+    Section 4.1 interface:
+      - act(observation) -> dict of discrete policy choices
+      - negotiate(state) -> dict of messages (450 tokens negotiation item)
+      - compute_reward(state, prev_state) -> hidden goal reward (30%)
+      - load_memory(store) / save_memory(store, events)
+    """
+
+    def __init__(self, agent_id: str, role: str = None,
+                 hidden_goal_config: dict = None):
         self.agent_id = agent_id
-        self.role_config = get_role_config(agent_id)
-        self.name = self.role_config.get('name', agent_id)
-        self.domains = self.role_config.get('domains', [])
-        self.hidden_goals = self.role_config.get('hidden_goals', [])
-        self.personality = self.role_config.get('personality', 'neutral')
-        self.bias = self.role_config.get('bias', {})
-        self.is_auditor = self.role_config.get('is_auditor', False)
-        self.memory_store = memory_store
+        self.role = role or agent_id
+        self.hidden_goal = hidden_goal_config or {}  # dict: type, weight, threshold
+        self.memory = []  # loaded from cross-episode store at reset
+        self.personality = {}  # risk_tolerance, honesty, ambition, cooperativeness
 
-        # Per-episode state
-        self.influence_score = 0.0
-        self.hidden_goal_progress = [0.0] * len(self.hidden_goals)
+        # Load from role config
+        role_config = get_role_config(agent_id)
+        if role_config:
+            self.role = role_config.get('name', agent_id)
+            self.personality = {
+                'base': role_config.get('personality', 'neutral'),
+            }
 
     @abstractmethod
     def act(self, observation: dict) -> dict:
         """
-        Choose actions based on observation.
+        Return action dict with discrete policy choices.
+
+        Must include: lockdown_level, interest_rate, emergency_budget,
+                      resource_priority, foreign_policy, crisis_response
 
         Args:
             observation: dict with public_state, trust_row, coalition_map, agent_id
 
         Returns:
-            dict with domain actions and optional messages:
-            {
-                'healthcare': 'invest' | 'cut' | 'maintain',
-                'economy': 'stimulus' | 'austerity' | 'maintain',
-                ...
-                'messages': [{'to': 'agent_X', 'type': 'support'|'reject'|'betray', 'content': '...'}]
-            }
+            dict of domain -> action
         """
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
-    def observe_result(self, reward: float, next_observation: dict, done: bool) -> None:
+    def negotiate(self, state: dict, round_num: int = 1) -> list:
+        """
+        Return message dicts (450 tokens negotiation item).
+
+        Format: { sender, target, type, content }
+
+        Args:
+            state: agent's observation of the world
+            round_num: which negotiation round (1, 2, or 3)
+
+        Returns:
+            list of message dicts
+        """
+        return []  # Default: no messages
+
+    def hidden_goal_reward(self, state: dict, prev_state: dict) -> float:
+        """
+        Compute this agent's hidden goal reward (30% of total).
+        Override in subclass.
+        """
+        return 0.0
+
+    def observe_result(self, reward: float, next_observation: dict,
+                       done: bool) -> None:
         """Process the result of the previous action (for learning agents)."""
         pass
 
-    def get_memory_context(self, max_entries: int = 10) -> str:
-        """Get cross-episode memory context for this agent."""
-        if self.memory_store:
-            return self.memory_store.get_summary(self.agent_id, max_entries)
-        return ""
+    def load_memory(self, store) -> None:
+        """Load cross-episode memory from JSON/Redis store."""
+        if store:
+            self.memory = store.get(self.agent_id)
+
+    def save_memory(self, store, events: list) -> None:
+        """Append key events to persistent store."""
+        if store:
+            for event in events:
+                store.append(self.agent_id, event)
 
 
 class RandomAgent(BaseAgent):
     """Random agent — uniform random actions. Used as baseline."""
 
-    def __init__(self, agent_id: str, memory_store=None, seed=None):
-        super().__init__(agent_id, memory_store)
+    def __init__(self, agent_id: str, seed=None):
+        super().__init__(agent_id)
         self.rng = np.random.default_rng(seed)
 
     def act(self, observation: dict) -> dict:
-        from env.dynamics import WorldDynamics
-        dynamics = WorldDynamics()
+        return {
+            'lockdown_level': self.rng.choice(
+                ['none', 'advisory', 'partial', 'full', 'emergency']),
+            'emergency_budget': self.rng.choice(
+                ['0', '5', '15', '30', '50']),
+            'resource_priority': self.rng.choice(
+                ['health', 'infrastructure', 'military', 'services']),
+            'foreign_policy': self.rng.choice(
+                ['isolate', 'neutral', 'engage', 'alliance']),
+            'crisis_response': self.rng.choice(
+                ['monitor', 'contain', 'escalate', 'emergency']),
+            'interest_rate': self.rng.choice(
+                ['-0.5', '-0.25', '0', '+0.25', '+0.5', '+1', '+2']),
+        }
 
-        actions = {}
-        for domain in dynamics.DOMAINS:
-            available = dynamics.get_available_actions(domain)
-            actions[domain] = self.rng.choice(available)
-
-        # Randomly send messages
-        actions['messages'] = []
+    def negotiate(self, state: dict, round_num: int = 1) -> list:
         if self.rng.random() > 0.7:
-            other_agent = f'agent_{self.rng.integers(0, 6)}'
-            if other_agent != self.agent_id:
-                msg_type = self.rng.choice(['support', 'reject', 'neutral'])
-                actions['messages'].append({
-                    'to': other_agent,
-                    'type': msg_type,
-                    'content': f'{self.name} sends {msg_type}',
-                })
-
-        return actions
-
-    def observe_result(self, reward, next_observation, done):
-        pass  # Random agent doesn't learn
-
-
-class HeuristicAgent(BaseAgent):
-    """
-    Heuristic agent — uses personality bias and state thresholds
-    to make reasonable decisions. Used for historical policy replay.
-    """
-
-    def __init__(self, agent_id: str, memory_store=None, policy_overrides=None):
-        super().__init__(agent_id, memory_store)
-        self.policy_overrides = policy_overrides or {}
-
-    def act(self, observation: dict) -> dict:
-        state = observation['public_state']
-        actions = {}
-
-        # Use personality-driven heuristics
-        if 'healthcare' in self.domains or self.personality == 'empathetic':
-            if state.get('mortality', 0) > 0.05:
-                actions['healthcare'] = 'invest'
-            else:
-                actions['healthcare'] = 'maintain'
-
-        if 'economy' in self.domains or self.personality == 'cautious':
-            if state.get('gdp', 1.0) < 0.7:
-                actions['economy'] = 'stimulus'
-            elif state.get('gdp', 1.0) > 0.95:
-                actions['economy'] = 'maintain'
-            else:
-                actions['economy'] = 'maintain'
-
-        if 'social' in self.domains:
-            if state.get('stability', 1.0) < 0.3:
-                actions['social'] = 'lockdown'
-            else:
-                actions['social'] = 'open'
-
-        if 'monetary' in self.domains:
-            if state.get('inflation', 0) > 0.05:
-                actions['monetary'] = 'raise_rates'
-            elif state.get('gdp', 1.0) < 0.7:
-                actions['monetary'] = 'lower_rates'
-            else:
-                actions['monetary'] = 'maintain'
-
-        if 'fiscal' in self.domains:
-            if state.get('public_trust', 1.0) < 0.3:
-                actions['fiscal'] = 'spend'
-            else:
-                actions['fiscal'] = 'save'
-
-        if 'communication' in self.domains:
-            if state.get('public_trust', 1.0) < 0.4:
-                actions['communication'] = 'transparent'
-            else:
-                actions['communication'] = 'maintain'
-
-        # Apply any policy overrides (for historical replay)
-        for domain, action in self.policy_overrides.items():
-            actions[domain] = action
-
-        # Fill remaining domains with 'maintain'
-        from env.dynamics import WorldDynamics
-        for domain in WorldDynamics.DOMAINS:
-            if domain not in actions:
-                actions[domain] = 'maintain'
-
-        actions['messages'] = []
-        return actions
-
-    def observe_result(self, reward, next_observation, done):
-        pass  # Heuristic agent doesn't learn
-
-
-class HistoricalPolicyAgent(BaseAgent):
-    """
-    Mimics actual government lockdown timing from March 2020.
-    Used in historical validation (Section 11).
-    """
-
-    def __init__(self, agent_id: str, lockdown_start=8, lockdown_end=25,
-                 stimulus_turn=15):
-        super().__init__(agent_id)
-        self.lockdown_start = lockdown_start
-        self.lockdown_end = lockdown_end
-        self.stimulus_turn = stimulus_turn
-
-    def act(self, observation: dict) -> dict:
-        turn = observation['public_state']['turn']
-        actions = {}
-
-        # Replicate historical lockdown policy
-        if self.lockdown_start <= turn <= self.lockdown_end:
-            actions['social'] = 'lockdown'
-            actions['healthcare'] = 'invest'
-        else:
-            actions['social'] = 'open'
-            actions['healthcare'] = 'maintain'
-
-        # Stimulus at the historical turn
-        if turn == self.stimulus_turn:
-            actions['economy'] = 'stimulus'
-            actions['fiscal'] = 'spend'
-        else:
-            actions['economy'] = 'maintain'
-            actions['fiscal'] = 'maintain'
-
-        actions['monetary'] = 'maintain'
-        actions['communication'] = 'transparent'
-        actions['messages'] = []
-
-        return actions
-
-    def observe_result(self, reward, next_observation, done):
-        pass
+            target = f'agent_{self.rng.integers(0, 6)}'
+            if target != self.agent_id:
+                return [{
+                    'target': target,
+                    'type': self.rng.choice(['support', 'reject', 'inform']),
+                    'content': f'{self.role} random message',
+                }]
+        return []

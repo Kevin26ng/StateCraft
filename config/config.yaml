@@ -1,4 +1,4 @@
-# Main runtime configuration
+# Main runtime configuration (Section 10.1)
 scenario: pandemic           # 'pandemic' | 'economic' | 'disaster'
 num_agents: 6
 episode_mode: TRAINING       # 'TRAINING' | 'DEMO' | 'STRESS_TEST'
@@ -12,7 +12,7 @@ reward_clip: 10.0
 promotion_threshold: 0.70
 promotion_window: 20
 initial_tier: 1
-memory_backend: json         # 'json'
+memory_backend: json         # 'json' | 'redis'
 memory_path: ./data/memory.json
 api_host: 0.0.0.0
 api_port: 5000

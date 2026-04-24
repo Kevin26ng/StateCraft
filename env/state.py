@@ -1,6 +1,27 @@
 """
-State Manager — manages the 12-field world state dict.
+State Manager — manages the exact 12-field world state dict.
 All state transitions go through this module.
+
+Section 3.1.2 — Complete State Structure:
+  # Core economic
+  'gdp':            float,   # GDP index. Baseline=1.0. Collapse if <0.3
+  'inflation':      float,   # Current rate. Target=0.02. Range [-0.1, 0.5]
+  'resources':      float,   # Total allocatable resource pool [0, inf]
+
+  # Social
+  'stability':      float,   # Societal stability [0,1]. Episode ends if <0.2
+  'mortality':      float,   # Cumulative mortality index rel. to baseline [0,1]
+  'gini':           float,   # Inequality. 0=equal, 1=max inequality [0,1]
+  'public_trust':   float,   # Public approval/institutional trust [0,1]
+
+  # Multi-agent
+  'trust_matrix':   np.array,  # Shape (6,6). trust_matrix[i][j] in [0,1]
+  'coalition_map':  dict,      # { agent_id: coalition_id } current membership
+
+  # Meta
+  'turn':           int,     # Current turn. 0-indexed.
+  'difficulty_tier': int,    # Current tier [1-5]
+  'scenario_data':  dict,    # Scenario-specific sub-variables (see 3.2-3.4)
 """
 
 import numpy as np
@@ -12,9 +33,10 @@ class StateManager:
 
     # The 12 canonical state fields
     STATE_FIELDS = [
-        'gdp', 'mortality', 'stability', 'gini', 'public_trust',
-        'inflation', 'treasury', 'healthcare_capacity', 'unemployment',
-        'infection_rate', 'turn', 'difficulty_tier', 'past_actions', 'lockdown_duration'
+        'gdp', 'inflation', 'resources',
+        'stability', 'mortality', 'gini', 'public_trust',
+        'trust_matrix', 'coalition_map',
+        'turn', 'difficulty_tier', 'scenario_data',
     ]
 
     def __init__(self, num_agents: int = 6):
@@ -27,29 +49,33 @@ class StateManager:
     def initialize(self, scenario_state: dict = None) -> dict:
         """Initialize state from scenario or defaults."""
         defaults = {
+            # Core economic
             'gdp': 1.0,
-            'mortality': 0.0,
+            'inflation': 0.02,
+            'resources': 1000.0,
+
+            # Social
             'stability': 0.75,
+            'mortality': 0.0,
             'gini': 0.39,
             'public_trust': 0.62,
-            'inflation': 0.02,
-            'treasury': 0.80,
-            'healthcare_capacity': 0.70,
-            'unemployment': 0.036,
-            'infection_rate': 0.0,
+
+            # Meta
             'turn': 0,
             'difficulty_tier': 1,
-            'past_actions': [],
-            'lockdown_duration': 0,
+            'scenario_data': {},
         }
 
         if scenario_state:
+            # Merge scenario_data separately if provided
+            if 'scenario_data' in scenario_state:
+                defaults['scenario_data'].update(scenario_state.pop('scenario_data'))
             defaults.update(scenario_state)
 
         self.state = defaults
         self.state['turn'] = 0
 
-        # Initialize trust matrix — slight positive bias on diagonal neighbors
+        # Initialize trust matrix — diagonal = 1.0, off-diagonal = 0.5
         self.trust_matrix = np.full(
             (self.num_agents, self.num_agents), 0.5
         )
@@ -57,6 +83,10 @@ class StateManager:
 
         # Everyone starts in their own coalition
         self.coalition_map = {f'agent_{i}': i for i in range(self.num_agents)}
+
+        # Store trust_matrix and coalition_map in state for observation
+        self.state['trust_matrix'] = self.trust_matrix.copy()
+        self.state['coalition_map'] = deepcopy(self.coalition_map)
 
         self.state_history = [deepcopy(self.state)]
 
@@ -77,21 +107,19 @@ class StateManager:
 
         # Clamp values to valid ranges
         self.state['gdp'] = max(0.0, self.state['gdp'])
-        self.state['mortality'] = np.clip(self.state['mortality'], 0.0, 1.0)
+        self.state['inflation'] = np.clip(self.state['inflation'], -0.1, 0.5)
+        self.state['resources'] = max(0.0, self.state['resources'])
         self.state['stability'] = np.clip(self.state['stability'], 0.0, 1.0)
+        self.state['mortality'] = np.clip(self.state['mortality'], 0.0, 1.0)
         self.state['gini'] = np.clip(self.state['gini'], 0.0, 1.0)
         self.state['public_trust'] = np.clip(self.state['public_trust'], 0.0, 1.0)
-        self.state['inflation'] = max(-0.1, self.state['inflation'])
-        self.state['treasury'] = np.clip(self.state['treasury'], 0.0, 1.0)
-        self.state['healthcare_capacity'] = np.clip(
-            self.state['healthcare_capacity'], 0.0, 1.0
-        )
-        self.state['unemployment'] = np.clip(self.state['unemployment'], 0.0, 1.0)
-        self.state['infection_rate'] = np.clip(self.state['infection_rate'], 0.0, 1.0)
 
     def advance_turn(self) -> None:
         """Increment turn counter and snapshot state."""
         self.state['turn'] += 1
+        # Sync multi-agent fields into state before snapshot
+        self.state['trust_matrix'] = self.trust_matrix.copy()
+        self.state['coalition_map'] = deepcopy(self.coalition_map)
         self.state_history.append(deepcopy(self.state))
 
     def update_trust(self, agent_a: int, agent_b: int, delta: float) -> None:
@@ -108,15 +136,16 @@ class StateManager:
         self.coalition_map[agent_id] = coalition_id
 
     def check_collapse(self) -> bool:
-        """Check if societal collapse has occurred."""
+        """
+        Check if societal collapse has occurred.
+        Section 3.1.3 Episode Termination Conditions:
+          - stability < 0.2 → COLLAPSE (-100 terminal penalty, episode ends immediately)
+          - gdp < 0.3 → ECONOMIC COLLAPSE (-100 terminal penalty, same as stability collapse)
+        """
         s = self.state
-        if s['mortality'] > 0.5:
+        if s['stability'] < 0.2:
             return True
-        if s['gdp'] < 0.2:
-            return True
-        if s['stability'] < 0.05:
-            return True
-        if s['public_trust'] < 0.05:
+        if s['gdp'] < 0.3:
             return True
         return False
 
