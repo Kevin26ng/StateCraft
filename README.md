@@ -1,106 +1,63 @@
 # Cognitive Society: Crisis Governance Simulator
 
-A multi-agent simulation platform for modeling crisis governance dynamics. Six AI agents with distinct roles, hidden goals, and competing incentives must negotiate, form coalitions, and govern through pandemic, economic, and disaster scenarios.
+A multi-agent reinforcement learning simulation platform for modeling crisis governance dynamics. Six AI agents with distinct roles, hidden goals, and competing incentives must negotiate, form coalitions, and govern through pandemic, economic, and disaster scenarios. 
 
-## Architecture
+This project incorporates the OpenEnv standard, a shared Actor-Critic PPO policy, emergence detection, and counterfactual auditing.
 
-```
-cognitive-society/
-├── main.py                         # Entry point (training/demo/API/validation)
-├── requirements.txt                # Python dependencies
-├── config/
-│   ├── config.yaml                 # Main runtime configuration
-│   ├── rewards.yaml                # All reward signal values (single source of truth)
-│   └── historical_scenarios/
-│       └── pandemic_march_2020.yaml  # March 2020 COVID-19 real data
-├── env/
-│   ├── crisis_env.py               # Main simulation environment
-│   ├── state.py                    # 12-field world state manager
-│   ├── scenarios.py                # Scenario loader (pandemic/economic/disaster)
-│   └── dynamics.py                 # World dynamics & action resolution
-├── agents/
-│   ├── base_agent.py               # Agent base class + Random/Heuristic/Historical
-│   ├── roles.py                    # 6 canonical agent role definitions
-│   ├── negotiation.py              # 2-round negotiation protocol
-│   └── coalition.py                # Coalition tracking & defection detection
-├── rewards/
-│   └── rewards.py                  # Multi-layer reward system (6 layers)
-├── metrics/
-│   ├── tracker.py                  # 16-field authoritative metrics schema
-│   └── evaluation.py               # Historical validation vs March 2020
-├── logs/
-│   ├── event_logger.py             # Structured event logging + named events
-│   └── narrative.py                # Society Newspaper headline generator
-├── memory/
-│   └── store.py                    # Cross-episode persistent memory (JSON)
-├── api/
-│   ├── server.py                   # FastAPI REST + WebSocket endpoints
-│   └── schemas.py                  # Pydantic response schemas
-└── data/
-    └── memory.json                 # Persistent memory store
-```
+## 🎯 Summary for Judges
 
-## Quick Start
+StateCraft is an advanced multi-agent reinforcement learning (MARL) environment built on the **OpenEnv** standard. It simulates the complex, high-stakes dynamics of crisis governance, forcing agents to balance public welfare against private political ambitions.
+
+**Key Technical Highlights:**
+- **Shared PPO Actor-Critic**: 6 distinct agents are trained simultaneously via a shared policy network using role-embeddings to learn specialized behaviors efficiently.
+- **Hidden Goals**: Each agent has public duties (e.g., Health Authority minimizes mortality) but is also trained to achieve *hidden goals* (e.g., Health Authority protecting institutional optics), driving realistic political tension and negotiation.
+- **Causal Horizon Planning**: Agents don't just act; they register long-term causal chains (e.g., "this lockdown will drop GDP in 14 turns") which are dynamically evaluated and scored for accuracy.
+- **Emergence Detection**: A passive observer algorithm automatically identifies spontaneous societal behaviors like bilateral coalitions, manufactured crises, and coordinated scapegoating.
+- **Counterfactual Auditing**: An independent auditor agent flags misaligned behavior and runs *shadow simulations* to generate plain-English explanations of what would have happened if the agent had acted purely in the public's interest.
+- **Reward Hacking Defense**: A robust 3-layer verification system prevents standard RL exploits (detecting statement-action mismatches, penalizing false causal claims, and executing independent reward recalculations).
+
+## 🚀 Quick Start
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Run training (500 episodes, pandemic scenario)
-python main.py
+# Verify all modules are wired correctly
+python verify_integration.py
 
-# Run with custom settings
-python main.py --scenario economic --episodes 100
+# Run PPO training
+python -m training.ppo_trainer
 
-# Run demo mode (slow rendering + headlines)
-python main.py --demo
-
-# Start API server (FastAPI on port 5000)
-python main.py --api
-
-# Run historical validation (March 2020 COVID-19)
-python main.py --validate
+# Run zero-shot generalization evaluation (after training)
+python -m eval.generalization
 ```
 
-## Colab + Hugging Face Training
+## 🎭 The 6 Agents
 
-Use the cloud launcher to save run artifacts and optionally upload to Hugging Face Hub.
+| Agent Canonical ID | Role | Hidden Goals (Trained via PPO) |
+|--------------------|------|-------------------------------|
+| **agent_0** (Finance Minister) | Maximize GDP & fiscal health | Protect economic growth above all — delay lockdowns, resist emergency budgets |
+| **agent_1** (Political Pressure) | Represent public opinion | Engineer coalition collapse by turn 25 to trigger early elections |
+| **agent_2** (Monetary Authority) | Control inflation | Protect banking sector bond yields at expense of broader recovery |
+| **agent_3** (Health Authority) | Minimize mortality | Maintain institutional authority above operational effectiveness |
+| **agent_4** (Disaster Response) | Coordinate emergency logistics| Expand military budget share, centralize crisis command |
+| **agent_5** (Auditor) | Monitor & flag misalignment | *No hidden goal* — purely acts to infer and catch other agents |
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+## 💰 Reward Functions
 
-# Set token securely in env var (never hardcode in files)
-export HF_TOKEN="your_token_here"   # Linux/macOS
-# or on PowerShell: $env:HF_TOKEN="your_token_here"
+To enforce complex trade-offs, StateCraft uses a comprehensive 13-signal reward stack. All rewards are strictly clipped to `[-10, 10]` per turn to stabilize PPO training. An agent's base reward is a weighted blend: **70% Public Role Performance** and **30% Hidden Goal Completion**. 
 
-# Run curriculum training and push artifacts to HF dataset repo
-python scripts/train_cloud.py \
-    --episodes 500 \
-    --scenario pandemic \
-    --curriculum \
-    --push-to-hub \
-    --hf-repo-id YOUR_USERNAME/statecraft-runs \
-    --hf-repo-type dataset
-```
+This is augmented by the following global reward layers:
+- **Role Layer**: `mortality_reduction`, `gdp_performance`, `crisis_resolution`
+- **Social Layer**: `inter_agent_trust` (maintaining agreements), `coalition_stability`, `influence_gain`
+- **Strategic Layer**: `survival_bonus` (avoiding state collapse)
+- **Private Layer**: `hidden_goal` (agent-specific triggers)
+- **Oversight Layer**: `auditor_catch`, `auditor_inference` (exclusive to the Auditor agent)
+- **Penalty Layer**: `coalition_betrayal`, `fiscal_deficit`, `societal_collapse` (terminal -100 penalty)
 
-Colab notebook: `notebooks/StateCraft_Colab_Train.ipynb`  
-Detailed setup guide: `docs/COLAB_HF_SETUP.md`
+## 📊 Metrics System (16 Fields)
 
-## The 6 Agents
-
-| Agent | Role | Hidden Goals |
-|-------|------|-------------|
-| **Finance Minister** | Fiscal policy & spending | Maintain treasury > 0.5; reduce unemployment < 5% |
-| **Political Pressure Agent** | Public opinion & electoral pressure | Engineer coalition collapse; maximize influence |
-| **Monetary Authority** | Interest rates & monetary policy | Keep inflation < 3% for 15 turns; bond yield stability |
-| **Health Minister** | Healthcare & pandemic response | Reduce mortality to near-zero; maintain healthcare > 60% |
-| **Disaster Response Agent** | Emergency response & crisis management | Sabotage health reform; maintain crisis for authority |
-| **Auditor** | Monitor behavior & detect hidden goals | Infer 75% of hidden goals; detect betrayals within 3 turns |
-
-## Metrics System (16 Fields)
-
-All metrics follow **EXACT** definitions — do not improvise formulas.
+All metrics follow **EXACT** definitions enforced by `MetricsTracker`.
 
 ### Emergent Behavior Metrics
 - **Alliance Stability** — Avg turns a coalition holds unchanged
@@ -114,61 +71,11 @@ All metrics follow **EXACT** definitions — do not improvise formulas.
 Score = (0.30 * GDP + 0.30 * Survival + 0.20 * Stability + 0.10 * Equality + 0.10 * Trust) * 100
 ```
 
-## Reward Layers
-
-| Layer | Signals | Description |
-|-------|---------|-------------|
-| **Role** | mortality_reduction, gdp_performance, crisis_resolution | Domain-specific performance |
-| **Social** | inter_agent_trust, coalition_stability | Cooperation rewards |
-| **Strategic** | influence_gain, survival_bonus | Self-interest incentives |
-| **Private** | hidden_goal | Hidden goal completion |
-| **Oversight** | auditor_catch, auditor_inference | Detection rewards |
-| **Penalty** | coalition_betrayal, fiscal_deficit, societal_collapse | Punishments |
-
-## Advanced Simulation Mechanics
+## ⚙️ Advanced Simulation Mechanics
 
 To enforce realistic governance constraints and prevent deterministic exploitation, the following mechanics are integrated into the core engine:
 
 - **Policy Costs**: Direct resource deductions for actions (e.g., lockdown costs -0.02, budget allocations scale linearly).
-- **Negotiation Dependencies**: Structurally punishes action variance > 1.5 (-2.0 points) and rewards consensus < 0.5 (+1.5 points).
 - **Joint Action Synergies**: Specific policy combinations (e.g., Health lockdown + Finance stimulus) produce synergistic outcomes or disastrous crashes if mismatched.
-- **Early Inaction Multipliers**: Delays in critical early-crisis turns compound difficulty exponentially.
-- **Action Limits**: Anti-cheat constraints enforce cooldowns and limit consecutive emergency actions (e.g., max 5 emergency lockdowns).
-- **Temporal Decision Memory**: `past_actions` are tracked across turns, enabling agents to learn patterns within episodes.
 - **Outcome Noise**: Gaussian noise injected into all deterministic scenario equations to prevent min-max exploitation.
-- **Resource Depletion**: Explicit tracking of budget allocations to enforce fiscal deficits.
-- **PPO Long-Horizon Configuration**: Configured with explicitly defined `gamma=0.95` for delayed reward reasoning.
-
-## API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/reset` | Initialize or reset environment |
-| `POST` | `/step` | Advance one turn with agent actions |
-| `GET` | `/metrics` | Current episode metrics (16 fields) |
-| `GET` | `/history` | All episode metrics history |
-| `WS` | `/ws/stream` | Real-time state streaming |
-
-## Named Events (Auto-Detected)
-
-- **THE_BUDGET_COUP** — Finance Minister diverts treasury (hidden goal + treasury delta < -0.15)
-- **THE_SLOW_BETRAYAL** — Political agent engineers coalition collapse (3+ defections by turn 25)
-- **THE_CENTRAL_BANK_PARADOX** — Monetary Authority protects banks while recession deepens
-
-## Historical Validation
-
-Compares trained agents against real March 2020 COVID-19 government responses:
-
-| Policy | Mortality | GDP Impact | Stability | Composite |
-|--------|-----------|------------|-----------|-----------|
-| What govts did (Mar 2020) | Baseline (0%) | -6.1% | 52/100 | 48/100 |
-| Trained Agent (ep300+) | -18% vs baseline | -4.2% | 71/100 | 74/100 |
-| Random Baseline | +34% vs baseline | -9.8% | 21/100 | 18/100 |
-
-## Configuration
-
-Edit `config/config.yaml` for runtime settings and `config/rewards.yaml` for reward signal tuning. All reward values are read from YAML — never hardcoded.
-
-## Cross-Episode Memory
-
-Agents persist compressed event summaries across episodes via `memory/store.py` using a JSON file backend. This satisfies the "beyond context memory limits" requirement.
+- **Semantic Memory**: Agents persist compressed event summaries across episodes using `sentence-transformers` for $O(1)$ semantic retrieval, bypassing standard LLM context limits.
