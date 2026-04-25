@@ -62,6 +62,31 @@ python main.py --api
 python main.py --validate
 ```
 
+## Colab + Hugging Face Training
+
+Use the cloud launcher to save run artifacts and optionally upload to Hugging Face Hub.
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Set token securely in env var (never hardcode in files)
+export HF_TOKEN="your_token_here"   # Linux/macOS
+# or on PowerShell: $env:HF_TOKEN="your_token_here"
+
+# Run curriculum training and push artifacts to HF dataset repo
+python scripts/train_cloud.py \
+    --episodes 500 \
+    --scenario pandemic \
+    --curriculum \
+    --push-to-hub \
+    --hf-repo-id YOUR_USERNAME/statecraft-runs \
+    --hf-repo-type dataset
+```
+
+Colab notebook: `notebooks/StateCraft_Colab_Train.ipynb`  
+Detailed setup guide: `docs/COLAB_HF_SETUP.md`
+
 ## The 6 Agents
 
 | Agent | Role | Hidden Goals |
