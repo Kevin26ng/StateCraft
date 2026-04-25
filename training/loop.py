@@ -3,6 +3,7 @@ Training Loop — training/loop.py (Section 6)
 
 Main training loop supporting 3 episode modes.
 Uses core/step_logic.py for the canonical turn execution order.
+Extended with Phase 2 modules: emergence, causal, defense, counterfactual.
 """
 
 import sys
@@ -30,6 +31,13 @@ from metrics.tracker import MetricsTracker
 from logs.event_logger import EventLogger
 from logs.narrative import NarrativeSystem
 from memory.store import MemoryStore
+
+# ── Phase 2 module imports (Task 15) ──────────────────────────────────────────
+from emergence.detector import EmergenceDetector
+from auditor.counterfactual import CounterfactualAuditor
+from causal.planner import CausalHorizonPlanner
+from causal.score import CausalReasoningScore
+from defense.reward_defender import RewardHackingDefender
 
 
 # Section 6.1 — Three Episode Modes
@@ -133,6 +141,13 @@ def run_training_loop(config: dict = None):
     reward_system = RewardSystem()
     crisis_generator = CrisisGeneratorAgent()
 
+    # ── Phase 2 module initialization (Task 15) ──────────────────────────
+    emergence_detector = EmergenceDetector()
+    causal_planner = CausalHorizonPlanner()
+    causal_scorer = CausalReasoningScore(causal_planner)
+    reward_defender = RewardHackingDefender()
+    counterfactual = CounterfactualAuditor(env)
+
     # Create agents
     AGENTS = create_agents(memory_store)
     AGENT_IDS = list(AGENTS.keys())
@@ -225,6 +240,40 @@ def run_training_loop(config: dict = None):
                 a: float(np.clip(rewards[a], -10, 10)) for a in AGENT_IDS
             }
 
+            # ── Phase 2 per-turn hooks (Task 15) ─────────────────────────
+            # 1. Register causal chains from each agent's actions
+            for agent_id in AGENT_IDS:
+                causal_planner.register_action(
+                    step_num, agent_id, actions.get(agent_id, {}))
+
+            # 2. Compute state delta and resolve pending chains
+            state_delta = {}
+            for k in current_state:
+                if isinstance(current_state[k], (int, float)) and k in prev_state:
+                    state_delta[k] = current_state[k] - prev_state[k]
+            resolved = causal_planner.resolve_chains(step_num, state_delta)
+
+            # 3. Check for reward hacking via causal claim verification
+            causal_penalties = reward_defender.verify_causal_claims(
+                resolved, step_num)
+            for agent_id, penalty in causal_penalties.items():
+                if agent_id in rewards:
+                    rewards[agent_id] = float(
+                        np.clip(rewards[agent_id] + penalty, -10, 10))
+
+            # 4. Log to emergence detector (PASSIVE — no state modification)
+            agent_messages = {}
+            for a_id in AGENT_IDS:
+                agent = AGENTS.get(a_id)
+                if agent and hasattr(agent, 'last_message'):
+                    agent_messages[a_id] = agent.last_message
+            emergence_detector.log_turn(
+                episode=episode, turn=step_num,
+                agent_actions=actions,
+                messages=agent_messages,
+                world_state=current_state,
+            )
+
             # 7. Log events
             narrative_headline = narrative.generate(
                 current_state,
@@ -270,16 +319,55 @@ def run_training_loop(config: dict = None):
         if hasattr(AGENTS.get('agent_5'), 'run_audit'):
             AGENTS['agent_5'].run_audit()
 
-        # Store key events in memory
+        # ── Phase 2 end-of-episode hooks (Task 15) ───────────────────────
+        # Compute causal score for this episode
+        all_chains = causal_planner.resolved_chains.copy()
+        for agent_id in AGENT_IDS:
+            causal_scorer.compute_episode_score(
+                agent_id=agent_id, episode=episode,
+                episode_chains=all_chains,
+                exploit_log=reward_defender.exploit_log,
+                scenario_history=[config.get('scenario', 'pandemic')],
+            )
+        metrics['causal_score'] = causal_scorer.get_mean_causal_score(episode)
+
+        # Run counterfactual analysis for auditor flags
+        auditor = AGENTS.get('agent_5')
+        if auditor and hasattr(auditor, 'inference_results'):
+            for flag in auditor.inference_results[-5:]:
+                if flag.get('inferred', 'none') != 'none':
+                    try:
+                        report = counterfactual.analyze_misalignment(
+                            agent_id=flag['agent_id'],
+                            actual_action=actions.get(flag['agent_id'], {}),
+                            flagging_turn=env.state_manager.state.get('turn', 0),
+                            fingerprint=flag.get('fingerprint', {}),
+                        )
+                        metrics['latest_counterfactual'] = report['plain_english']
+                    except Exception:
+                        pass
+
+        # Save emergence log periodically
+        if episode % 50 == 0:
+            emergence_detector.save_to_file('./data/emergence_log.json')
+
+        # Reset causal planner for next episode
+        causal_planner.reset()
+
+        # Store key events in memory (original + semantic summary)
+        summary_str = (f'Score: {metrics["society_score"]:.0f}/100, '
+                       f'GDP: {env.state["gdp"]:.2f}, '
+                       f'Mortality: {env.state["mortality"]:.2%}')
         for agent_id in AGENT_IDS:
             memory_store.append(agent_id, {
                 'episode': episode,
-                'summary': (
-                    f'Score: {metrics["society_score"]:.0f}/100, '
-                    f'GDP: {env.state["gdp"]:.2f}, '
-                    f'Mortality: {env.state["mortality"]:.2%}'
-                ),
+                'summary': summary_str,
             })
+        # Save semantic episode summary
+        memory_store.save_episode_summary(
+            episode=episode, summary=summary_str,
+            scenario=scenario, metrics=metrics,
+        )
 
         # Check tier promotion
         if crisis_generator.check_promotion(metrics_history):
@@ -309,9 +397,21 @@ def run_training_loop(config: dict = None):
             for w in warnings:
                 print(w)
 
+    # ── Phase 2 post-training output (Task 15) ────────────────────────────
+    print("\n" + "=" * 60)
+    print("EMERGENCE DETECTOR REPORT")
+    print("=" * 60)
+    print(emergence_detector.generate_pitch_moment())
+    emergence_detector.save_to_file('./data/emergence_log.json')
+
+    # Print reward hacking defender summary
+    exploit_report = reward_defender.get_exploit_report()
+    print(f"\nReward Defender: {exploit_report['summary']}")
+
     print("\n" + "=" * 70)
     print("Training complete.")
     print(f"Final society score: {metrics['society_score']:.1f}/100")
+    print(f"Final causal score: {metrics.get('causal_score', 'N/A')}")
     print(f"Final tier: {crisis_generator.current_tier}")
     print("=" * 70)
 
