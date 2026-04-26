@@ -1,3 +1,13 @@
+---
+title: StateCraft
+emoji: 🏛️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: true
+app_port: 7860
+---
+
 # StateCraft: Crisis Governance Simulator
 
 A multi-agent reinforcement learning simulation platform for modeling crisis governance dynamics. Six AI agents with distinct roles, hidden goals, and competing incentives must negotiate, form coalitions, and govern through pandemic, economic, and disaster scenarios. 

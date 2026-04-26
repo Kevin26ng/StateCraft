@@ -46,7 +46,10 @@ export function useRunStream({
     if (isUnmountingRef.current) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//localhost:5000/ws/stream`;
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const wsUrl = isLocal
+      ? `${protocol}//localhost:5000/ws/stream`
+      : `${protocol}//${window.location.host}/ws/stream`;
 
     try {
       const ws = new WebSocket(wsUrl);
