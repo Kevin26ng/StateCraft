@@ -1,15 +1,132 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+*.pyo
+
+# Virtual environments
 venv/
 .venv/
+env/
+.env/
+ENV/
 
+# ─── Environment / Secrets ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ─── Jupyter Notebook Outputs ─────────────────────────────────────────────────
+# Keep .ipynb files but strip outputs before committing; ignore checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ─── Data & Runtime Files ─────────────────────────────────────────────────────
 data/memory.json
+data/memory_summaries.json
+data/*.json
+data/*.csv
+data/*.pkl
+data/*.h5
+data/*.hdf5
+data/*.sqlite
+data/*.db
+
+# ─── Model Checkpoints & Training Artifacts ───────────────────────────────────
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+runs/
+outputs/
+wandb/
+mlruns/
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
 *.log
+logs/*.log
+logs/*.jsonl
+*.out
+
+# ─── Large Binaries / Native Modules ─────────────────────────────────────────
+*.node
+*.wasm
+*.dll
+*.exe
+*.so.*
+
+# ─── Loose Screenshots / Temp Images at Repo Root ────────────────────────────
+Screenshot*.png
+Screenshot*.jpg
+screen*.png
+screen*.jpg
+*.tmp.png
+
+# ─── Next.js / Node ───────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.cache/
+frontend/coverage/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Lock files (large auto-generated — reproducible from package.json)
+frontend/package-lock.json
+frontend/yarn.lock
+frontend/pnpm-lock.yaml
+
+# Next.js auto-generated type declaration
+frontend/next-env.d.ts
+
+# ─── Large Public Screenshot Assets ──────────────────────────────────────────
+frontend/public/Screenshot*.png
+frontend/public/Screenshot*.jpg
+frontend/public/screen*.png
+frontend/public/screen*.jpg
+
+# ─── Font Binaries (serve via CDN / self-host separately) ────────────────────
+frontend/app/fonts/*.woff
+frontend/app/fonts/*.woff2
+frontend/app/fonts/*.ttf
+frontend/app/fonts/*.otf
+
+# ─── Favicon binary ──────────────────────────────────────────────────────────
+frontend/app/favicon.ico
+
+# ─── Editor / IDE ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
-.env
+desktop.ini
+ehthumbs.db
+
+# ─── Test / Lint Caches ───────────────────────────────────────────────────────
+*.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/

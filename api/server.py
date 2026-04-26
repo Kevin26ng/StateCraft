@@ -5,6 +5,7 @@ FastAPI endpoints and WebSocket for the Crisis Governance Simulator.
 """
 
 import asyncio
+import numpy as np
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,6 +18,27 @@ from metrics.tracker import MetricsTracker
 from logs.event_logger import EventLogger
 from logs.narrative import NarrativeSystem
 from agents.auditor import AuditorAgent
+
+# ─────────────────────────────────────────────────────────────────────
+# Numpy serialization helper
+# ─────────────────────────────────────────────────────────────────────
+
+def sanitize(obj):
+    """Recursively convert numpy types to JSON-serializable Python types."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.bool_):
+        return bool(obj)
+    if isinstance(obj, dict):
+        return {k: sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [sanitize(i) for i in obj]
+    return obj
+
 
 # ─────────────────────────────────────────────────────────────────────
 # 9.1 FastAPI Endpoints
@@ -49,7 +71,7 @@ async def reset(config: ResetConfig = None):
     obs = env.reset(config)
     event_logger.clear_turn_events()
     trust_system._init_defaults()
-    return {'observations': obs, 'state': env.state}
+    return sanitize({'observations': obs, 'state': env.state})
 
 
 # POST /step — advance one turn
@@ -57,40 +79,36 @@ async def reset(config: ResetConfig = None):
 async def step(actions: ActionsPayload):
     event_logger.clear_turn_events()
 
-    # Enforce action limits & tracking
     raw_actions = actions.actions_dict
     raw_actions = env.enforce_and_track_actions(raw_actions)
 
-    # Aggregate actions
     final_action = aggregate_actions(raw_actions)
 
     obs, rewards, done, info = env.step(final_action, raw_agent_actions=raw_actions)
     metrics = tracker.compute_episode_metrics(env)
     events = event_logger.get_turn_events()
 
-    # Generate headline
     headline = narrative.generate(env.state, events, env.state.get('turn', 0))
 
-    # Sync trust system
     env.state_manager.trust_matrix = trust_system.get_trust_matrix()
     env.state_manager.coalition_map = trust_system.get_coalition_map()
 
     response = StepResponse(
-        state=env.state,
+        state=sanitize(env.state),
         trust_matrix=env.state_manager.trust_matrix.tolist(),
-        coalition_graph=tracker.get_coalition_graph(env),
-        events=events,
-        actions=final_action,
-        messages=info.get('messages', []),
-        metrics=metrics,
-        headline=headline,
-        done=done,
-        auditor_report=auditor.fingerprint_cache,
+        coalition_graph=sanitize(tracker.get_coalition_graph(env)),
+        events=sanitize(events),
+        actions=sanitize(final_action),
+        messages=sanitize(info.get('messages', [])),
+        metrics=sanitize(metrics),
+        headline=str(headline) if headline else '',
+        done=bool(done),
+        auditor_report=sanitize(auditor.fingerprint_cache),
     )
 
     if done:
         tracker.record_episode(metrics)
-        metrics_history.append(metrics)
+        metrics_history.append(sanitize(metrics))
 
     return response
 
@@ -98,7 +116,7 @@ async def step(actions: ActionsPayload):
 # GET /metrics — Current episode metrics
 @app.get('/metrics')
 async def get_metrics():
-    return tracker.compute_episode_metrics(env)
+    return sanitize(tracker.compute_episode_metrics(env))
 
 
 # GET /history — all episode metrics
@@ -116,16 +134,15 @@ async def stream(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            # Push state update after every env.step()
-            payload = {
+            payload = sanitize({
                 'turn':         env.state_manager.state.get('turn', 0),
                 'state':        env.state_manager.state,
                 'trust_matrix': env.state_manager.trust_matrix.tolist(),
                 'events':       event_logger.get_turn_events(),
                 'headline':     narrative.last_headline,
                 'metrics':      tracker.get_current_metrics(),
-            }
+            })
             await websocket.send_json(payload)
-            await asyncio.sleep(0.0)  # yield — demo mode uses sleep(0.5)
+            await asyncio.sleep(0.0)
     except WebSocketDisconnect:
         pass
