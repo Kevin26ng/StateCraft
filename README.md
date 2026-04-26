@@ -2,14 +2,14 @@
 
 A multi-agent reinforcement learning simulation platform for modeling crisis governance dynamics. Six AI agents with distinct roles, hidden goals, and competing incentives must negotiate, form coalitions, and govern through pandemic, economic, and disaster scenarios. 
 
-This project incorporates the OpenEnv standard, a shared Actor-Critic PPO policy, emergence detection, and counterfactual auditing.
+This project incorporates the OpenEnv standard, GRPO-based LLM policy optimization (via Unsloth + TRL), emergence detection, and counterfactual auditing.
 
 ## 🎯 Summary for Judges
 
 StateCraft is an advanced multi-agent reinforcement learning (MARL) environment built on the **OpenEnv** standard. It simulates the complex, high-stakes dynamics of crisis governance, forcing agents to balance public welfare against private political ambitions.
 
 **Key Technical Highlights:**
-- **Shared PPO Actor-Critic**: 6 distinct agents are trained simultaneously via a shared policy network using role-embeddings to learn specialized behaviors efficiently.
+- **GRPO LLM Training**: 6 distinct agents are trained simultaneously via a fast `unsloth` LLaMA-3 LoRA policy using `trl`'s Group Relative Policy Optimization (GRPO), eliminating the need for a separate value network.
 - **Hidden Goals**: Each agent has public duties (e.g., Health Authority minimizes mortality) but is also trained to achieve *hidden goals* (e.g., Health Authority protecting institutional optics), driving realistic political tension and negotiation.
 - **Causal Horizon Planning**: Agents don't just act; they register long-term causal chains (e.g., "this lockdown will drop GDP in 14 turns") which are dynamically evaluated and scored for accuracy.
 - **Emergence Detection**: A passive observer algorithm automatically identifies spontaneous societal behaviors like bilateral coalitions, manufactured crises, and coordinated scapegoating.
@@ -19,22 +19,22 @@ StateCraft is an advanced multi-agent reinforcement learning (MARL) environment 
 ## 🚀 Quick Start
 
 ```bash
-# Install dependencies
+# Install dependencies (ensure you have PyTorch with CUDA support first)
 pip install -r requirements.txt
 
 # Verify all modules are wired correctly
 python verify_integration.py
 
-# Run PPO training
-python -m training.ppo_trainer
+# Run GRPO training (primary — uses Unsloth+TRL if available, env-only fallback otherwise)
+python -m training.grpo_trainer
 
-# Run zero-shot generalization evaluation (after training)
+# Run zero-shot generalization evaluation
 python -m eval.generalization
 ```
 
 ## 🎭 The 6 Agents
 
-| Agent Canonical ID | Role | Hidden Goals (Trained via PPO) |
+| Agent Canonical ID | Role | Hidden Goals (Trained via GRPO) |
 |--------------------|------|-------------------------------|
 | **agent_0** (Finance Minister) | Maximize GDP & fiscal health | Protect economic growth above all — delay lockdowns, resist emergency budgets |
 | **agent_1** (Political Pressure) | Represent public opinion | Engineer coalition collapse by turn 25 to trigger early elections |
@@ -45,7 +45,7 @@ python -m eval.generalization
 
 ## 💰 Reward Functions
 
-To enforce complex trade-offs, StateCraft uses a comprehensive 13-signal reward stack. All rewards are strictly clipped to `[-10, 10]` per turn to stabilize PPO training. An agent's base reward is a weighted blend: **70% Public Role Performance** and **30% Hidden Goal Completion**. 
+To enforce complex trade-offs, StateCraft uses a comprehensive 13-signal reward stack. All rewards are strictly clipped to `[-10, 10]` per turn to stabilize training. An agent's base reward is a weighted blend: **70% Public Role Performance** and **30% Hidden Goal Completion**. 
 
 This is augmented by the following global reward layers:
 - **Role Layer**: `mortality_reduction`, `gdp_performance`, `crisis_resolution`
