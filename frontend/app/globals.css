@@ -1,0 +1,309 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-feature-settings: 'tnum';
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: #0a0a0a;
+    color: #f3f4f6;
+    font-family: var(--font-inter, 'Inter', sans-serif);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Typography */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  h1 {
+    font-size: 56px;
+  }
+
+  h2 {
+    font-size: 28px;
+  }
+
+  h3 {
+    font-size: 24px;
+  }
+
+  /* Tabular numbers globally */
+  @supports (font-variant-numeric: tabular-nums) {
+    body {
+      font-variant-numeric: tabular-nums;
+    }
+  }
+
+  /* Links */
+  a {
+    color: #7dd3fc;
+    text-decoration: none;
+    transition: color 150ms ease-out;
+  }
+
+  a:hover {
+    color: #bfdbfe;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #0a0a0a;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1f2023;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #374151;
+  }
+}
+
+@layer components {
+  /* Utility classes for common patterns */
+  .surface {
+    @apply bg-[#111113];
+  }
+
+  .hairline-border {
+    @apply border-[#1F2023];
+  }
+
+  .text-primary {
+    @apply text-[#F3F4F6];
+  }
+
+  .text-secondary {
+    @apply text-[#9CA3AF];
+  }
+
+  .text-tertiary {
+    @apply text-[#6B7280];
+  }
+
+  .uppercase-label {
+    @apply text-xs font-semibold uppercase tracking-[0.08em] text-[#6B7280];
+  }
+
+  /* Vitals/metrics tier colors */
+  .severity-nominal {
+    @apply text-[#34D399];
+  }
+
+  .severity-warning {
+    @apply text-[#F59E0B];
+  }
+
+  .severity-danger {
+    @apply text-[#EF4444];
+  }
+
+  .bg-severity-nominal {
+    @apply bg-[#34D399];
+  }
+
+  .bg-severity-warning {
+    @apply bg-[#F59E0B];
+  }
+
+  .bg-severity-danger {
+    @apply bg-[#EF4444];
+  }
+
+  /* Agent palette colors */
+  .agent-0 {
+    @apply text-[#FBBF24];
+  }
+
+  .agent-1 {
+    @apply text-[#F472B6];
+  }
+
+  .agent-2 {
+    @apply text-[#A78BFA];
+  }
+
+  .agent-3 {
+    @apply text-[#34D399];
+  }
+
+  .agent-4 {
+    @apply text-[#FB923C];
+  }
+
+  .agent-5 {
+    @apply text-[#94A3B8];
+  }
+
+  .bg-agent-0 {
+    @apply bg-[#FBBF24];
+  }
+
+  .bg-agent-1 {
+    @apply bg-[#F472B6];
+  }
+
+  .bg-agent-2 {
+    @apply bg-[#A78BFA];
+  }
+
+  .bg-agent-3 {
+    @apply bg-[#34D399];
+  }
+
+  .bg-agent-4 {
+    @apply bg-[#FB923C];
+  }
+
+  .bg-agent-5 {
+    @apply bg-[#94A3B8];
+  }
+
+  /* Layout */
+  .main-content {
+    @apply max-w-[1280px] mx-auto px-12;
+  }
+
+  .mission-control-content {
+    @apply max-w-[960px] mx-auto px-12;
+  }
+}
+
+/* Animations */
+@keyframes drawer-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes drawer-slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes backdrop-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes backdrop-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes tab-underline-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@layer utilities {
+  .animate-drawer-in {
+    animation: drawer-slide-in 200ms ease-out forwards;
+  }
+
+  .animate-drawer-out {
+    animation: drawer-slide-out 150ms ease-out forwards;
+  }
+
+  .animate-backdrop-in {
+    animation: backdrop-fade-in 200ms ease-out forwards;
+  }
+
+  .animate-backdrop-out {
+    animation: backdrop-fade-out 200ms ease-out forwards;
+  }
+
+  .animate-tab-slide {
+    animation: tab-underline-slide 150ms ease-out forwards;
+  }
+
+  .animate-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  .tabular-numbers {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
