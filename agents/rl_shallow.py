@@ -22,30 +22,33 @@ except ImportError:
 from .base_agent import BaseAgent
 
 
-class ShallowPolicyNet(nn.Module):
-    """A shallow multi-head policy network (single hidden layer)."""
+if _TORCH_AVAILABLE:
+    class ShallowPolicyNet(nn.Module):
+        """A shallow multi-head policy network (single hidden layer)."""
 
-    def __init__(self, input_dim: int = 22, hidden_dim: int = 64):
-        super().__init__()
-        self.backbone = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-        )
-        self.lockdown_head = nn.Linear(hidden_dim, 5)
-        self.interest_head = nn.Linear(hidden_dim, 5)
-        self.budget_head = nn.Linear(hidden_dim, 5)
-        self.priority_head = nn.Linear(hidden_dim, 4)
-        self.crisis_head = nn.Linear(hidden_dim, 4)
+        def __init__(self, input_dim: int = 22, hidden_dim: int = 64):
+            super().__init__()
+            self.backbone = nn.Sequential(
+                nn.Linear(input_dim, hidden_dim),
+                nn.ReLU(),
+            )
+            self.lockdown_head = nn.Linear(hidden_dim, 5)
+            self.interest_head = nn.Linear(hidden_dim, 5)
+            self.budget_head = nn.Linear(hidden_dim, 5)
+            self.priority_head = nn.Linear(hidden_dim, 4)
+            self.crisis_head = nn.Linear(hidden_dim, 4)
 
-    def forward(self, x: torch.Tensor):
-        h = self.backbone(x)
-        return {
-            "lockdown": self.lockdown_head(h),
-            "interest": self.interest_head(h),
-            "budget": self.budget_head(h),
-            "priority": self.priority_head(h),
-            "crisis": self.crisis_head(h),
-        }
+        def forward(self, x: torch.Tensor):
+            h = self.backbone(x)
+            return {
+                "lockdown": self.lockdown_head(h),
+                "interest": self.interest_head(h),
+                "budget": self.budget_head(h),
+                "priority": self.priority_head(h),
+                "crisis": self.crisis_head(h),
+            }
+else:
+    ShallowPolicyNet = None  # type: ignore
 
 
 class RLShallowAgent(BaseAgent):
@@ -68,6 +71,8 @@ class RLShallowAgent(BaseAgent):
         hidden_dim: int = 64,
         device: str = "cpu",
     ):
+        if not _TORCH_AVAILABLE:
+            raise ImportError("torch is required to use RLShallowAgent")
         super().__init__(agent_id=agent_id, role=role_agent.role)
         self.role_agent = role_agent
         self.device = torch.device(device)

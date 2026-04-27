@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Image from 'next/image';
 import { AGENT_ROLES } from '@/lib/agents';
 
 const SLIDES = [
@@ -63,13 +62,11 @@ export default function AgentRosterCarousel() {
           className="absolute inset-0 transition-opacity duration-200"
           style={{ opacity: transitioning ? 0 : 1 }}
         >
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={slide.image}
             alt={role.name}
-            fill
-            sizes="(max-width: 768px) 100vw, 800px"
-            className="object-cover object-top"
-            priority
+            className="w-full h-full object-cover object-top"
           />
         </div>
 
