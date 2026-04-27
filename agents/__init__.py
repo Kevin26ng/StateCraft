@@ -6,7 +6,10 @@ from .military import MilitaryAgent
 from .central_bank import CentralBankAgent
 from .political import PoliticalAgent
 from .auditor import AuditorAgent
-from .rl_shallow import RLShallowAgent
+try:
+    from .rl_shallow import RLShallowAgent
+except ImportError:
+    RLShallowAgent = None  # type: ignore
 from .llm_socket import LLMSocketAgent
 from .crisis_generator_agent import CrisisGeneratorAgent
 from .negotiation import NegotiationProtocol

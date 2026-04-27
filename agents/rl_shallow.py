@@ -9,8 +9,15 @@ Designed for the 4 RL-controlled roles in hybrid setups:
 from typing import Dict, Optional
 
 import numpy as np
-import torch
-import torch.nn as nn
+
+try:
+    import torch
+    import torch.nn as nn
+    _TORCH_AVAILABLE = True
+except ImportError:
+    torch = None  # type: ignore
+    nn = None     # type: ignore
+    _TORCH_AVAILABLE = False
 
 from .base_agent import BaseAgent
 

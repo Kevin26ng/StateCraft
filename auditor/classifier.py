@@ -5,10 +5,18 @@ LSTM sequence classifier over behavioral fingerprint time series.
 Gives a real confusion matrix — the second metric beyond society score.
 """
 
-import torch
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
+
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    _TORCH_AVAILABLE = True
+except ImportError:
+    torch = None       # type: ignore
+    nn = None          # type: ignore
+    optim = None       # type: ignore
+    _TORCH_AVAILABLE = False
 
 try:
     from sklearn.metrics import confusion_matrix, classification_report

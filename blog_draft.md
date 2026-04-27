@@ -4,7 +4,7 @@ Have you ever wondered how complex political decisions are made during a crisis?
 
 We built **StateCraft**, a multi-agent reinforcement learning (MARL) environment, to simulate exactly this. By placing AI agents in high-stakes crisis scenarios (like pandemics, economic crashes, and natural disasters), we can observe how they negotiate, form coalitions, and sometimes, inevitably, clash.
 
-![StateCraft Simulator UI](./screen.png)
+![StateCraft Simulator UI](.public\screen.png)
 
 ---
 
@@ -16,7 +16,7 @@ Every action has a cost. For instance, imposing a lockdown might cost `-0.02` in
 
 To keep things realistic and prevent our agents from simply "memorizing" the perfect path, we inject Gaussian noise into all deterministic scenario equations. You can't just min-max your way out of a crisis!
 
-![Environment / Dashboard](./screen%201.png)
+![Environment / Dashboard](public\scrren 4.png)
 
 ---
 
@@ -37,7 +37,7 @@ Each agent has a public duty (what they are supposed to do) and a hidden goal (w
 | 🚒 **Disaster Response**  | Coordinate emergency logistics | Expand military budget share, centralize crisis command.                     |
 | 👁️ **The Auditor**        | Monitor & flag misalignment    | _No hidden goal_ — purely acts to infer and catch other agents misbehaving.  |
 
-![Agents Overview](./screen%201-1.png)
+![Agents Overview](public\screen 1.png)
 
 ---
 
@@ -49,7 +49,7 @@ Agents also possess **Semantic Memory**. They compress event summaries across ep
 
 <!-- TODO: Add actual screenshot -->
 
-![Memory/Emergent Behavior Screenshot Placeholder](./metrics_placeholder.png)
+![Memory/Emergent Behavior](./public/REPLACE_memory_emergent.png)
 
 ### The Auditor's Counterfactuals
 
@@ -63,7 +63,7 @@ This includes everything from a basic `survival_bonus` to a `societal_collapse` 
 
 <!-- TODO: Add actual screenshot -->
 
-![Reward Metrics Screenshot Placeholder](./reward_chart_placeholder.png)
+![Reward Metrics](public\scrren 2.png)
 
 ---
 
@@ -73,17 +73,17 @@ Over 2,000 GRPO (Group Relative Policy Optimisation) episodes, our policy progre
 
 <!-- TODO: Add actual screenshot -->
 
-![Training Phases Placeholder](./training_phases_placeholder.png)
+![Training Phases](./public/REPLACE_training_phases.png)
 
-![Training Screenshot 1](./Screenshot%202026-04-26%20162716.png)
+![Training Screenshot 1](public\blog-1.png)
 
 Ultimately, the simulation achieves a strong Best Reward of 8.91 and an impressive Auditor Accuracy of 87.3%, successfully demonstrating the agents' learning curves.
 
 <!-- TODO: Add actual screenshot -->
 
-![Training Report Placeholder](./training_report_placeholder.png)
+![Training Report](public\blog-1.png)
 
-![Training Screenshot 2](./Screenshot%202026-04-26%20162724.png)
+![Training Screenshot 2](public\bar.png)
 
 ---
 
