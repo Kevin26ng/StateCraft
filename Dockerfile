@@ -9,6 +9,8 @@ COPY frontend/ ./
 
 # API routes through nginx in production
 ENV NEXT_PUBLIC_API_URL=/api
+# Serve agent portraits from GitHub raw CDN (bypasses LFS pointer issue in HF build context)
+ENV NEXT_PUBLIC_ASSET_BASE=https://github.com/Kevin26ng/StateCraft/raw/main/frontend/public
 RUN npm run build
 
 # ── Stage 2: Production runtime ──────────────────────────────────────────────

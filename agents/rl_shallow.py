@@ -6,6 +6,8 @@ Designed for the 4 RL-controlled roles in hybrid setups:
   agent_0 (finance), agent_2 (central bank), agent_3 (health), agent_4 (military)
 """
 
+from __future__ import annotations
+
 from typing import Dict, Optional
 
 import numpy as np

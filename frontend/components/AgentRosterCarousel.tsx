@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AGENT_ROLES } from '@/lib/agents';
 
+const BASE = process.env.NEXT_PUBLIC_ASSET_BASE ?? '';
+
 const SLIDES = [
-  { id: 'agent_0', image: '/agents/m2.png' },
-  { id: 'agent_1', image: '/agents/m1.png' },
-  { id: 'agent_2', image: '/agents/m3.png' },
-  { id: 'agent_3', image: '/agents/m4.png' },
-  { id: 'agent_4', image: '/agents/m5.png' },
+  { id: 'agent_0', image: `${BASE}/agents/m2.png` },
+  { id: 'agent_1', image: `${BASE}/agents/m1.png` },
+  { id: 'agent_2', image: `${BASE}/agents/m3.png` },
+  { id: 'agent_3', image: `${BASE}/agents/m4.png` },
+  { id: 'agent_4', image: `${BASE}/agents/m5.png` },
 ] as const;
 
 const HIDDEN_GOALS: Record<string, string> = {
