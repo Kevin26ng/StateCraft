@@ -1,0 +1,6 @@
+spec_version: 1
+name: statecraft
+type: space
+runtime: fastapi
+app: api.server:app
+port: 5000
